@@ -95,3 +95,12 @@ class SLoanForm(forms.ModelForm):
                {"class": "form-control", "placeholder": "توضیحات اضافی"}
           )
         
+
+from purchase.models import BothPartyLedger
+class bothpartyForm(forms.ModelForm):
+     date_is = forms.CharField(label='تاریخ',widget=AdminJalaliDateWidget(attrs={"placeholder": "0/0/0000", "id": "datepicker13",'class': 'form-control' }))
+     class Meta:
+          model = BothPartyLedger
+          fields = ["date_is"]
+     def __init__(self, *args, **kwargs):
+          super().__init__(*args, **kwargs)

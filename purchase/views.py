@@ -29,6 +29,32 @@ def reshape_text(text):
     reshaped_text = arabic_reshaper.reshape(str(text))
     return get_display(reshaped_text)
 
+def create_both_party_purchase_ledger(customer, purchase_instance, total_amount, paid_amount, remain_amount):
+    last_row = BothPartyLedger.objects.filter(customer=customer).order_by('-id').first()
+
+    prev_supplier_balance = last_row.current_supplier_balance if last_row else Decimal('0')
+    prev_customer_balance = last_row.current_customer_balance if last_row else Decimal('0')
+
+    new_supplier_balance = prev_supplier_balance + Decimal(remain_amount)
+    new_customer_balance = prev_customer_balance
+
+    return BothPartyLedger.objects.create(
+        customer=customer,
+        entry_type='purchase',
+        date=purchase_instance.date,
+        purchase=purchase_instance,
+        total_amount=Decimal(total_amount),
+        paid_amount=Decimal(paid_amount),
+        remain_amount=Decimal(remain_amount),
+        previous_supplier_balance=prev_supplier_balance,
+        previous_customer_balance=prev_customer_balance,
+        current_supplier_balance=new_supplier_balance,
+        current_customer_balance=new_customer_balance,
+        note='ثبت خرید برای شخص هردو'
+    )
+
+
+
 
 def Purchase(request):  
     summary = (
@@ -36,7 +62,7 @@ def Purchase(request):
             total_quantity=Sum('quantity'),
             total_weight=Sum('wegiht')
         )
-    )
+    ) 
     all_customers = Customer.objects.filter(role__in=['تامین کننده', 'هردو'])
     url = request.META.get('HTTP_REFERER') 
     my_form = ParchaseForm(request.POST or None)
@@ -106,45 +132,55 @@ def Purchase(request):
                     weight_field=weightt,
                     in_and_out='IN'
                 )
+                if customer.role == 'تامین کننده':
+                    if Purchase_instance.remain_amount != 0:
+                        latest_unpaid_loan = SLoan.objects.filter(customer_id=customer.id).order_by('id').last()
+                        if not latest_unpaid_loan:
+                            latest_unpaid_loan = 0
+                            find_total_amou = 0 
+                        else:
+                            find_total_amou = Decimal(latest_unpaid_loan.total_amount)
 
-                if Purchase_instance.remain_amount != 0:
-                    latest_unpaid_loan = SLoan.objects.filter(customer_id=customer.id).order_by('id').last()
-                    if not latest_unpaid_loan:
-                        latest_unpaid_loan = 0
-                        find_total_amou = 0 
-                    else:
-                        find_total_amou = Decimal(latest_unpaid_loan.total_amount)
+                        find_total = float(find_total_amou) + Purchase_instance.remain_amount
+                        SLoan.objects.create(
+                            customer=Purchase_instance.supplaier,  
+                            sale_id=Purchase_instance,
+                            amount=Purchase_instance.remain_amount,
+                            total_amount=find_total,    
+                            date_issued=Purchase_instance.date, 
+                            due_date="",  
+                            status="پرداخت نه شده",  
+                            notes=""  
+                        ) 
+                    elif Purchase_instance.remain_amount == 0:
+                        latest_unpaid_loan = SLoan.objects.filter(customer_id=customer.id).order_by('-id').first()
+                        if not latest_unpaid_loan:
+                            latest_unpaid_loan = 0
+                            find_total_amou = 0
+                        else:
+                            find_total_amou = Decimal(latest_unpaid_loan.total_amount)
 
-                    find_total = float(find_total_amou) + Purchase_instance.remain_amount
-                    SLoan.objects.create(
-                        customer=Purchase_instance.supplaier,  
-                        sale_id=Purchase_instance,
-                        amount=Purchase_instance.remain_amount,
-                        total_amount=find_total,    
-                        date_issued=Purchase_instance.date, 
-                        due_date="",  
-                        status="پرداخت نه شده",  
-                        notes=""  
-                    ) 
-                elif Purchase_instance.remain_amount == 0:
-                    latest_unpaid_loan = SLoan.objects.filter(customer_id=customer.id).order_by('-id').first()
-                    if not latest_unpaid_loan:
-                        latest_unpaid_loan = 0
-                        find_total_amou = 0
-                    else:
-                        find_total_amou = Decimal(latest_unpaid_loan.total_amount)
-
-                    find_total = find_total_amou
-                    SLoan.objects.create(
-                        customer=Purchase_instance.supplaier,  
-                        sale_id=Purchase_instance,
-                        amount=totall,
-                        total_amount=find_total,    
-                        date_issued=Purchase_instance.date,  
-                        due_date="", 
-                        status="پرداخت شده",  
-                        notes=""  
+                        find_total = find_total_amou
+                        SLoan.objects.create(
+                            customer=Purchase_instance.supplaier,  
+                            sale_id=Purchase_instance,
+                            amount=totall,
+                            total_amount=find_total,    
+                            date_issued=Purchase_instance.date,  
+                            due_date="", 
+                            status="پرداخت شده",  
+                            notes=""  
+                        )
+                elif customer.role == 'هردو':
+                    
+                    create_both_party_purchase_ledger(
+                        customer=customer,
+                        purchase_instance=Purchase_instance,
+                        total_amount=totall,
+                        paid_amount=pay,
+                        remain_amount=Purchase_instance.remain_amount
                     )
+
 
                 messages.success(request, 'خرید  موفقانه ثبت شد')
                 return redirect('purchase:purchase')
@@ -413,43 +449,60 @@ def log_in_our_system(request):
     logs = LogEntry.objects.select_related('user', 'content_type').order_by('-action_time')
     return render(request, 'purchase/all_logs.html', {'logs': logs})
 
-
-
 def delete_Purchase(request, id):
     try:
         with transaction.atomic():
             purchase = get_object_or_404(Parchase, id=id)
+            customer_obj = purchase.supplaier
             system_all_money = total_balance.objects.first()
             
             if system_all_money:
-                system_all_money.total_money_in_system += Decimal(purchase.paid_amount)
+                system_all_money.total_money_in_system += Decimal(purchase.paid_amount or 0)
                 system_all_money.save()
 
-            related_loans = SLoan.objects.get(sale_id=purchase)
-            find_the_remain_amount = related_loans.sale_id.remain_amount
-            find_the_paid_amoount_purchase = related_loans.sale_id.paid_amount
-            find_the_customer_id = related_loans.sale_id.supplaier_id
+            # =========================
+            # old supplier logic kept
+            # new both-party logic added
+            # =========================
+            if customer_obj.role == 'تامین کننده':
+                related_loans = SLoan.objects.filter(sale_id=purchase).first()
 
-            if related_loans.status == "پرداخت نه شده":
-                find_the_sloan_for_supp = SLoan.objects.filter(customer_id=find_the_customer_id).last()
-                mines_from_total_remian = find_the_sloan_for_supp.total_amount - find_the_remain_amount
-                delete_Record = related_loans.delete()
-                find_the_sloan_for_supp.total_amount = mines_from_total_remian
-                find_the_sloan_for_supp.save()
-            else:
-                delte_record = related_loans.delete()
+                if related_loans:
+                    find_the_remain_amount = Decimal(related_loans.sale_id.remain_amount or 0)
+                    find_the_customer_id = related_loans.sale_id.supplaier_id
 
+                    if related_loans.status == "پرداخت نه شده":
+                        find_the_sloan_for_supp = SLoan.objects.filter(customer_id=find_the_customer_id).last()
+                        if find_the_sloan_for_supp:
+                            mines_from_total_remian = Decimal(find_the_sloan_for_supp.total_amount or 0) - find_the_remain_amount
+                            related_loans.delete()
+                            find_the_sloan_for_supp.total_amount = mines_from_total_remian
+                            find_the_sloan_for_supp.save()
+                        else:
+                            related_loans.delete()
+                    else:
+                        related_loans.delete()
 
-            
+            elif customer_obj.role == 'هردو':
+                BothPartyLedger.objects.filter(
+                    customer=customer_obj,
+                    purchase=purchase,
+                    entry_type='purchase'
+                ).delete()
+
             inventrories.objects.filter(
                 pucrchase_foerignkey=purchase.id,
-                product_foerignkey=purchase.product, 
+                product_foerignkey=purchase.product,
                 warehouse_foerignkey=purchase.warehouse,
                 Quantity=purchase.quantity,
                 weight_field=purchase.wegiht
             ).delete()
 
             purchase.delete()
+
+            # recalculate ledger only for both-person
+            if customer_obj.role == 'هردو':
+                recalculate_both_party_ledger(customer_obj)
 
             messages.success(request, 'خرید موفقانه حذف شد')
             return redirect('purchase:purchase')
@@ -500,150 +553,408 @@ def loan(request):
     
     
 
+def recalculate_both_party_ledger(customer):
+    rows = BothPartyLedger.objects.filter(customer=customer).order_by('id')
 
+    supplier_balance = Decimal('0')
+    customer_balance = Decimal('0')
+
+    for row in rows:
+        row.previous_supplier_balance = supplier_balance
+        row.previous_customer_balance = customer_balance
+
+        if row.entry_type == 'purchase':
+            supplier_balance += Decimal(row.remain_amount or 0)
+
+        elif row.entry_type == 'sale':
+            customer_balance += Decimal(row.remain_amount or 0)
+
+        elif row.entry_type == 'pay_to_partner':
+            amount = Decimal(row.total_amount or 0)
+            supplier_balance -= amount
+
+        elif row.entry_type == 'receive_from_partner':
+            amount = Decimal(row.total_amount or 0)
+            customer_balance -= amount
+
+        row.current_supplier_balance = supplier_balance
+        row.current_customer_balance = customer_balance
+
+        row.save(update_fields=[
+            'previous_supplier_balance',
+            'previous_customer_balance',
+            'current_supplier_balance',
+            'current_customer_balance',
+        ])
+
+
+
+# def edit_purchase(request, purchase_id):
+#     purchase = get_object_or_404(Parchase, id=purchase_id)
+#     system_all_money = total_balance.objects.first()
+#     first_record = system_all_money.total_money_in_system if system_all_money else Decimal('0')
+
+#     original_total = purchase.total_unit
+#     original_paid = purchase.paid_amount
+#     original_remain = purchase.remain_amount
+#     original_status = purchase.status
+#     orginal_product = purchase.product
+#     original_suppliar = purchase.supplaier
+#     original_warehouse = purchase.warehouse
+    
+#     old_both_customer = None
+#     if request.method == 'POST':
+#         form = ParchaseForm(request.POST, instance=purchase)
+#         if form.is_valid():
+#             try:
+#                 with transaction.atomic():
+#                     inventory_entry = inventrories.objects.get(product_foerignkey=orginal_product,pucrchase_foerignkey=purchase,warehouse_foerignkey=original_warehouse)
+#                     inventory_entry.delete()
+#                     if original_suppliar.role == 'تامین کننده':
+#                         loan_entry = SLoan.objects.filter(
+#                             customer=original_suppliar,
+#                             sale_id=purchase
+#                         ).first()
+
+#                         later_loans = SLoan.objects.filter(customer=original_suppliar).last()
+#                         if later_loans:
+#                             mines_amount = Decimal(later_loans.total_amount or 0) - Decimal(original_remain or 0)
+#                             later_loans.total_amount = mines_amount
+#                             later_loans.save()
+
+#                         if loan_entry:
+#                             loan_entry.delete()
+
+#                     elif original_suppliar.role == 'هردو':
+#                         old_both_customer = original_suppliar
+#                         BothPartyLedger.objects.filter(
+#                             customer=original_suppliar,
+#                             purchase=purchase,
+#                             entry_type='purchase'
+#                         ).delete()
+                    
+                    
+#                     # Delete or update loan entry
+#                     # loan_entry = SLoan.objects.get(customer=original_suppliar,sale_id=purchase)
+#                     # later_loans = SLoan.objects.filter(customer=original_suppliar).last()
+#                     # mines_amount = later_loans.total_amount - original_remain
+#                     # later_loans.total_amount = mines_amount
+#                     # later_loans.save()
+#                     # loan_entry.delete()
+                    
+#                     # Now apply the new changes (similar to your original logic)
+#                     quantity = form.cleaned_data['quantity']
+#                     price_per_unit = form.cleaned_data['price_per_unit']
+#                     paid_amount = form.cleaned_data['paid_amount']
+                    
+#                     customer = form.cleaned_data.get('supplaier')
+#                     weight = form.cleaned_data.get('wegiht')
+#                     status = form.cleaned_data.get('status')
+                    
+#                     if status == 'ضرب وزن':
+#                         total = round(weight * price_per_unit)
+#                         remain = total - paid_amount
+#                         if Decimal(paid_amount) <= first_record:
+#                             mines = first_record + Decimal(original_paid) - Decimal(paid_amount)
+#                             system_all_money.total_money_in_system = mines
+#                             system_all_money.save()
+#                         else: 
+#                             messages.warning(request, 'پول موجودی در سیستم کم است لطفا پول اضافه کرده دوباره تلاش نمایید')
+#                             return redirect('purchase:purchase')  
+#                     else:
+#                         total = round(quantity * price_per_unit) 
+#                         remain = total - paid_amount
+#                         if Decimal(total) < first_record: 
+#                             mines = first_record + Decimal(original_paid) - Decimal(paid_amount)
+#                             system_all_money.total_money_in_system = mines
+#                             system_all_money.save()
+#                         else: 
+#                             messages.warning(request, 'پول موجودی در سیستم کم است لطفا پول اضافه کرده دوباره تلاش نمایید')
+#                             return redirect('purchase:purchase')
+                    
+#                     # Update purchase instance
+#                     purchase_instance = form.save(commit=False)
+#                     purchase_instance.remain_amount = remain
+#                     purchase_instance.total_unit = total
+                    
+#                     if paid_amount > total or paid_amount < 0 or remain > total or remain < 0:
+#                         messages.success(request, 'مقدار پول پرداختی یا باقی مانده شما مناسب نیست')
+#                         return redirect('purchase:purchase')
+#                     else:
+#                         purchase_instance.save() 
+
+                        
+
+#                     # Create new inventory entry
+#                     product = purchase_instance.product
+#                     warehouse = purchase_instance.warehouse
+#                     inventrories.objects.create(
+#                         pucrchase_foerignkey=purchase_instance,
+#                         product_foerignkey=product,
+#                         warehouse_foerignkey=warehouse,
+#                         Quantity=quantity,
+#                         weight_field=weight,
+#                         in_and_out='IN'
+#                     )
+
+#                     # Handle loan creation
+#                     if customer.role == 'تامین کننده':
+#                         if purchase_instance.remain_amount != 0:
+#                             latest_unpaid_loan = SLoan.objects.filter(customer_id=customer.id).order_by('id').last()
+#                             if not latest_unpaid_loan:
+#                                 latest_unpaid_loan = 0
+#                                 find_total_amou = 0
+#                             else:
+#                                 find_total_amou = Decimal(latest_unpaid_loan.total_amount)
+
+#                             find_total = float(find_total_amou) + purchase_instance.remain_amount
+#                             SLoan.objects.create(
+#                                 customer=purchase_instance.supplaier,  
+#                                 sale_id=purchase_instance,
+#                                 amount=purchase_instance.remain_amount,
+#                                 total_amount=find_total,    
+#                                 date_issued=purchase_instance.date, 
+#                                 due_date="",  
+#                                 status="پرداخت نه شده",  
+#                                 notes=""  
+#                             ) 
+#                         elif purchase_instance.remain_amount == 0:
+#                             latest_unpaid_loan = SLoan.objects.filter(customer_id=customer.id).order_by('-id').first()
+#                             if not latest_unpaid_loan:
+#                                 latest_unpaid_loan = 0
+#                                 find_total_amou = 0
+#                             else:
+#                                 find_total_amou = Decimal(latest_unpaid_loan.total_amount)
+
+#                             find_total = find_total_amou
+#                             SLoan.objects.create(
+#                                 customer=purchase_instance.supplaier,  
+#                                 sale_id=purchase_instance,
+#                                 amount=total,
+#                                 total_amount=find_total,    
+#                                 date_issued=purchase_instance.date,  
+#                                 due_date="", 
+#                                 status="پرداخت شده",  
+#                                 notes=""  
+#                             )
+#                     elif customer.role == 'هردو':
+#                         BothPartyLedger.objects.create(
+#                             customer=customer,
+#                             entry_type='purchase',
+#                             date=purchase_instance.date,
+#                             purchase=purchase_instance,
+#                             total_amount=Decimal(total),
+#                             paid_amount=Decimal(paid_amount),
+#                             remain_amount=Decimal(purchase_instance.remain_amount),
+#                             previous_supplier_balance=Decimal('0'),
+#                             previous_customer_balance=Decimal('0'),
+#                             current_supplier_balance=Decimal('0'),
+#                             current_customer_balance=Decimal('0'),
+#                             note='ویرایش خرید برای شخص هردو'
+#                         )
+#                     if old_both_customer:
+#                         recalculate_both_party_ledger(old_both_customer)
+
+#                     if customer.role == 'هردو':
+#                         recalculate_both_party_ledger(customer)
+
+#                     messages.success(request, 'خرید موفقانه ویرایش شد')
+#                     return redirect('purchase:purchase')
+#             except Exception as e:
+#                 messages.error(request, f'خطایی رخ داده است: {str(e)}')
+#                 return redirect('purchase:purchase')
+            
+            
+#     else:
+#         form = ParchaseForm(instance=purchase)
+    
+#     context = {
+#         'form': form,
+#         'purchase': purchase,
+#     }
+
+#     return render(request, 'purchase/edit_purchase.html', context)
 
 
 def edit_purchase(request, purchase_id):
     purchase = get_object_or_404(Parchase, id=purchase_id)
     system_all_money = total_balance.objects.first()
-    first_record = system_all_money.total_money_in_system if system_all_money else Decimal('0')
 
-    original_total = purchase.total_unit
-    original_paid = purchase.paid_amount
-    original_remain = purchase.remain_amount
+    if not system_all_money:
+        messages.warning(request, 'رکورد صندوق سیستم موجود نیست')
+        return redirect('purchase:purchase')
+
+    original_total = Decimal(purchase.total_unit or 0)
+    original_paid = Decimal(purchase.paid_amount or 0)
+    original_remain = Decimal(purchase.remain_amount or 0)
     original_status = purchase.status
     orginal_product = purchase.product
     original_suppliar = purchase.supplaier
     original_warehouse = purchase.warehouse
-    
-    
+
+    old_both_customer = None
+
     if request.method == 'POST':
         form = ParchaseForm(request.POST, instance=purchase)
         if form.is_valid():
             try:
                 with transaction.atomic():
-                    inventory_entry = inventrories.objects.get(product_foerignkey=orginal_product,pucrchase_foerignkey=purchase,warehouse_foerignkey=original_warehouse)
-                    inventory_entry.delete()
-                    
-                    
-                    # Delete or update loan entry
-                    loan_entry = SLoan.objects.get(customer=original_suppliar,sale_id=purchase)
-                    later_loans = SLoan.objects.filter(customer=original_suppliar).last()
-                    mines_amount = later_loans.total_amount - original_remain
-                    later_loans.total_amount = mines_amount
-                    later_loans.save()
-                    loan_entry.delete()
-                    
-                    # Now apply the new changes (similar to your original logic)
-                    quantity = form.cleaned_data['quantity']
-                    price_per_unit = form.cleaned_data['price_per_unit']
-                    paid_amount = form.cleaned_data['paid_amount']
-                    
+                    inventory_entry = inventrories.objects.filter(
+                        product_foerignkey=orginal_product,
+                        pucrchase_foerignkey=purchase,
+                        warehouse_foerignkey=original_warehouse
+                    ).first()
+                    if inventory_entry:
+                        inventory_entry.delete()
+
+                    if original_suppliar.role == 'تامین کننده':
+                        loan_entry = SLoan.objects.filter(
+                            customer=original_suppliar,
+                            sale_id=purchase
+                        ).first()
+
+                        later_loans = SLoan.objects.filter(customer=original_suppliar).last()
+                        if later_loans:
+                            mines_amount = Decimal(later_loans.total_amount or 0) - Decimal(original_remain or 0)
+                            later_loans.total_amount = mines_amount
+                            later_loans.save()
+
+                        if loan_entry:
+                            loan_entry.delete()
+
+                    elif original_suppliar.role == 'هردو':
+                        old_both_customer = original_suppliar
+                        BothPartyLedger.objects.filter(
+                            customer=original_suppliar,
+                            purchase=purchase,
+                            entry_type='purchase'
+                        ).delete()
+
+                    quantity = Decimal(form.cleaned_data['quantity'] or 0)
+                    price_per_unit = Decimal(form.cleaned_data['price_per_unit'] or 0)
+                    paid_amount = Decimal(form.cleaned_data['paid_amount'] or 0)
                     customer = form.cleaned_data.get('supplaier')
-                    weight = form.cleaned_data.get('wegiht')
+                    weight = Decimal(form.cleaned_data.get('wegiht') or 0)
                     status = form.cleaned_data.get('status')
-                    
+
+                    # محاسبه total و remain
                     if status == 'ضرب وزن':
-                        total = round(weight * price_per_unit)
-                        remain = total - paid_amount
-                        if Decimal(paid_amount) <= first_record:
-                            mines = first_record + Decimal(original_paid) - Decimal(paid_amount)
-                            system_all_money.total_money_in_system = mines
-                            system_all_money.save()
-                        else: 
-                            messages.warning(request, 'پول موجودی در سیستم کم است لطفا پول اضافه کرده دوباره تلاش نمایید')
-                            return redirect('purchase:purchase')  
+                        total = Decimal(round(weight * price_per_unit))
                     else:
-                        total = round(quantity * price_per_unit) 
-                        remain = total - paid_amount
-                        if Decimal(total) < first_record: 
-                            mines = first_record + Decimal(original_paid) - Decimal(paid_amount)
-                            system_all_money.total_money_in_system = mines
-                            system_all_money.save()
-                        else: 
-                            messages.warning(request, 'پول موجودی در سیستم کم است لطفا پول اضافه کرده دوباره تلاش نمایید')
-                            return redirect('purchase:purchase')
-                    
-                    # Update purchase instance
+                        total = Decimal(round(quantity * price_per_unit))
+
+                    remain = total - paid_amount
+
+                    # validation
+                    if paid_amount > total or paid_amount < 0 or remain > total or remain < 0:
+                        messages.warning(request, 'مقدار پول پرداختی یا باقی مانده شما مناسب نیست')
+                        return redirect('purchase:purchase')
+
+                    # -------------------------------
+                    # منطق درست صندوق در ویرایش
+                    # -------------------------------
+                    current_system_money = Decimal(system_all_money.total_money_in_system or 0)
+
+                    # اول پول قبلی را دوباره به صندوق برگردان
+                    available_money = current_system_money + original_paid
+
+                    # حالا پول جدید را از صندوق کم کن
+                    if paid_amount <= available_money:
+                        system_all_money.total_money_in_system = available_money - paid_amount
+                        system_all_money.save()
+                    else:
+                        messages.warning(request, 'پول موجودی در سیستم کم است لطفا پول اضافه کرده دوباره تلاش نمایید')
+                        return redirect('purchase:purchase')
+
+                    # ذخیره خرید
                     purchase_instance = form.save(commit=False)
                     purchase_instance.remain_amount = remain
                     purchase_instance.total_unit = total
-                    
-                    if paid_amount > total or paid_amount < 0 or remain > total or remain < 0:
-                        messages.success(request, 'مقدار پول پرداختی یا باقی مانده شما مناسب نیست')
-                        return redirect('purchase:purchase')
-                    else:
-                        purchase_instance.save() 
+                    purchase_instance.save()
 
-                        
-
-                    # Create new inventory entry
-                    product = purchase_instance.product
-                    warehouse = purchase_instance.warehouse
+                    # ایجاد دوباره موجودی انبار
                     inventrories.objects.create(
                         pucrchase_foerignkey=purchase_instance,
-                        product_foerignkey=product,
-                        warehouse_foerignkey=warehouse,
+                        product_foerignkey=purchase_instance.product,
+                        warehouse_foerignkey=purchase_instance.warehouse,
                         Quantity=quantity,
                         weight_field=weight,
                         in_and_out='IN'
                     )
 
                     # Handle loan creation
-                    if purchase_instance.remain_amount != 0:
-                        latest_unpaid_loan = SLoan.objects.filter(customer_id=customer.id).order_by('id').last()
-                        if not latest_unpaid_loan:
-                            latest_unpaid_loan = 0
-                            find_total_amou = 0
-                        else:
-                            find_total_amou = Decimal(latest_unpaid_loan.total_amount)
+                    if customer.role == 'تامین کننده':
+                        if purchase_instance.remain_amount != 0:
+                            latest_unpaid_loan = SLoan.objects.filter(customer_id=customer.id).order_by('id').last()
+                            if not latest_unpaid_loan:
+                                find_total_amou = Decimal('0')
+                            else:
+                                find_total_amou = Decimal(latest_unpaid_loan.total_amount or 0)
 
-                        find_total = float(find_total_amou) + purchase_instance.remain_amount
-                        SLoan.objects.create(
-                            customer=purchase_instance.supplaier,  
-                            sale_id=purchase_instance,
-                            amount=purchase_instance.remain_amount,
-                            total_amount=find_total,    
-                            date_issued=purchase_instance.date, 
-                            due_date="",  
-                            status="پرداخت نه شده",  
-                            notes=""  
-                        ) 
-                    elif purchase_instance.remain_amount == 0:
-                        latest_unpaid_loan = SLoan.objects.filter(customer_id=customer.id).order_by('-id').first()
-                        if not latest_unpaid_loan:
-                            latest_unpaid_loan = 0
-                            find_total_amou = 0
+                            find_total = find_total_amou + Decimal(purchase_instance.remain_amount)
+                            SLoan.objects.create(
+                                customer=purchase_instance.supplaier,
+                                sale_id=purchase_instance,
+                                amount=purchase_instance.remain_amount,
+                                total_amount=find_total,
+                                date_issued=purchase_instance.date,
+                                due_date="",
+                                status="پرداخت نه شده",
+                                notes=""
+                            )
                         else:
-                            find_total_amou = Decimal(latest_unpaid_loan.total_amount)
+                            latest_unpaid_loan = SLoan.objects.filter(customer_id=customer.id).order_by('-id').first()
+                            if not latest_unpaid_loan:
+                                find_total_amou = Decimal('0')
+                            else:
+                                find_total_amou = Decimal(latest_unpaid_loan.total_amount or 0)
 
-                        find_total = find_total_amou
-                        SLoan.objects.create(
-                            customer=purchase_instance.supplaier,  
-                            sale_id=purchase_instance,
-                            amount=total,
-                            total_amount=find_total,    
-                            date_issued=purchase_instance.date,  
-                            due_date="", 
-                            status="پرداخت شده",  
-                            notes=""  
+                            SLoan.objects.create(
+                                customer=purchase_instance.supplaier,
+                                sale_id=purchase_instance,
+                                amount=total,
+                                total_amount=find_total_amou,
+                                date_issued=purchase_instance.date,
+                                due_date="",
+                                status="پرداخت شده",
+                                notes=""
+                            )
+
+                    elif customer.role == 'هردو':
+                        BothPartyLedger.objects.create(
+                            customer=customer,
+                            entry_type='purchase',
+                            date=purchase_instance.date,
+                            purchase=purchase_instance,
+                            total_amount=Decimal(total),
+                            paid_amount=Decimal(paid_amount),
+                            remain_amount=Decimal(purchase_instance.remain_amount),
+                            previous_supplier_balance=Decimal('0'),
+                            previous_customer_balance=Decimal('0'),
+                            current_supplier_balance=Decimal('0'),
+                            current_customer_balance=Decimal('0'),
+                            note='ویرایش خرید برای شخص هردو'
                         )
+
+                    if old_both_customer:
+                        recalculate_both_party_ledger(old_both_customer)
+
+                    if customer.role == 'هردو':
+                        recalculate_both_party_ledger(customer)
 
                     messages.success(request, 'خرید موفقانه ویرایش شد')
                     return redirect('purchase:purchase')
+
             except Exception as e:
                 messages.error(request, f'خطایی رخ داده است: {str(e)}')
                 return redirect('purchase:purchase')
-            
-            
     else:
         form = ParchaseForm(instance=purchase)
-    
+
     context = {
         'form': form,
         'purchase': purchase,
     }
-
     return render(request, 'purchase/edit_purchase.html', context)
 
 from warehouse.models import warehouse_info

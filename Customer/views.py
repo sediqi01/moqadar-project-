@@ -13,6 +13,9 @@ from django.db import transaction
 from django.db.models import Q, Sum
 from product_and_catagory.models import *
 from purchase.models import *
+from decimal import Decimal
+from django.db.models import OuterRef, Subquery, F, Value, Case, When, DecimalField
+from django.db.models.functions import Coalesce
 def customer(request):
     if request.method == 'POST':
         my_form = CustomerForm(request.POST)
@@ -54,21 +57,72 @@ def customer(request):
         total_paid_amoun = sum_of_all_sale.aggregate(total=Sum('paid_amount_for_every_record'))['total']
         
         find_paid_amounts_that_paid_by_sale = Loan.objects.filter(status='پرداخت نه شده',sale_id=None).aggregate(total_amount=Sum('amount'))['total_amount']
-        collect_all = (total_paid_amoun or 0) + (total_paid_amount or 0) + (find_paid_amounts_that_paid_by_sale or 0)
+        find_all_paid_from_bothpartyledger = BothPartyLedger.objects.filter(entry_type='receive_from_partner').aggregate(total_paid=Sum('paid_amount'))
+        total_paid = find_all_paid_from_bothpartyledger['total_paid'] or 0
+
+        collect_all = (total_paid_amoun or 0) + (total_paid_amount or 0) + (find_paid_amounts_that_paid_by_sale or 0) + float(total_paid or 0)
       
 
 
-        latest_loans = Loan.objects.filter(customer=OuterRef('customer')).order_by('-created').values('id')[:1]
-        loans_with_latest = Loan.objects.filter(id__in=Subquery(latest_loans))
-        total_sum = loans_with_latest.aggregate(total_amount_sum=Sum('total_amount'))['total_amount_sum'] or 0  
+        # latest_loans = Loan.objects.filter(customer=OuterRef('customer')).order_by('-created').values('id')[:1]
+        # loans_with_latest = Loan.objects.filter(id__in=Subquery(latest_loans))
+        # total_sum = loans_with_latest.aggregate(total_amount_sum=Sum('total_amount'))['total_amount_sum'] or 0  
 
 
 
 
-        latest_loans = Loan.objects.filter(customer_id=OuterRef('id')).order_by('-id')
-        my_data = Customer.objects.filter(role__in=['مشتری', 'هردو']).annotate(
-            total_borrow=Subquery(latest_loans.values('total_amount')[:1])
+        # latest_loans = Loan.objects.filter(customer_id=OuterRef('id')).order_by('-id')
+        # my_data = Customer.objects.filter(role__in=['مشتری', 'هردو']).annotate(
+        #     total_borrow=Subquery(latest_loans.values('total_amount')[:1])
+        # )
+
+        latest_loans = Loan.objects.filter(
+            customer_id=OuterRef('id')
+        ).order_by('-id')
+
+        latest_ledger = BothPartyLedger.objects.filter(
+            customer_id=OuterRef('id')
+        ).order_by('-id')
+
+        my_data = Customer.objects.filter(
+            role__in=['مشتری', 'هردو']
+        ).annotate(
+            total_borrow=Coalesce(
+                Subquery(latest_loans.values('total_amount')[:1]),
+                Value(Decimal('0.00')),
+                output_field=DecimalField(max_digits=14, decimal_places=2)
+            ),
+
+            supplier_balance=Coalesce(
+                Subquery(latest_ledger.values('current_supplier_balance')[:1]),
+                Value(Decimal('0.00')),
+                output_field=DecimalField(max_digits=14, decimal_places=2)
+            ),
+            customer_balance=Coalesce(
+                Subquery(latest_ledger.values('current_customer_balance')[:1]),
+                Value(Decimal('0.00')),
+                output_field=DecimalField(max_digits=14, decimal_places=2)
+            ),
+        ).annotate(
+            ledger_due=Case(
+                When(
+                    customer_balance__gt=F('supplier_balance'),
+                    then=F('customer_balance') - F('supplier_balance')
+                ),
+                default=Value(Decimal('0.00')),
+                output_field=DecimalField(max_digits=14, decimal_places=2)
+            )
+        ).annotate(
+            customer_due=Case(
+                When(role='مشتری', then=F('total_borrow')),
+                When(role='هردو', then=F('ledger_due')),
+                default=Value(Decimal('0.00')),
+                output_field=DecimalField(max_digits=14, decimal_places=2)
+            )
         )
+        total_sum = my_data.aggregate(
+            total=Sum('customer_due')
+        )['total'] or 0
 
         for cus in my_data:
             id = cus.id
@@ -109,50 +163,416 @@ def customer(request):
         
         }
     return render(request, 'customer/customer.html', context)
+def both_partner_calculation_print(request, id):
+    customer = get_object_or_404(Customer, id=id)
 
-def loan_people(request):
-    all_customer = Customer.objects.filter(role='مشتری')
-    loan_data = []
-    for c in all_customer:
-        find_loan_record = Loan.objects.filter(customer=c).last()
-        if find_loan_record:
-            if find_loan_record.total_amount > 0:
-                loan_data.append({
-                    'name':c.name,
-                    'loan_amount':find_loan_record.total_amount if find_loan_record else 0,
-                })
-            else:
-                pass
-        else:
-            pass
+    if customer.role != 'هردو':
+        messages.warning(request, 'این صفحه فقط برای شخص هردو است')
+        return redirect(request.META.get('HTTP_REFERER', '/'))
+
+    ledger_rows = (
+        BothPartyLedger.objects
+        .filter(customer=customer)
+        .select_related('purchase', 'sale')
+        .order_by('id')
+    )
+
+    last_row = (
+        BothPartyLedger.objects
+        .filter(customer=customer)
+        .order_by('-id')
+        .first()
+    )
+
+    supplier_balance = last_row.current_supplier_balance if last_row else Decimal('0')
+    customer_balance = last_row.current_customer_balance if last_row else Decimal('0')
+
+    if supplier_balance > customer_balance:
+        net_amount = supplier_balance - customer_balance
+        net_status = 'ما قرضدار او هستیم'
+    elif customer_balance > supplier_balance:
+        net_amount = customer_balance - supplier_balance
+        net_status = 'او قرضدار ما است'
+    else:
+        net_amount = Decimal('0')
+        net_status = 'حساب تصفیه است'
 
     context = {
-        'loan_data':loan_data,
+        'customer': customer,
+        'ledger_rows': ledger_rows,
+        'supplier_balance': supplier_balance,
+        'customer_balance': customer_balance,
+        'net_amount': net_amount,
+        'net_status': net_status,
     }
-    return render(request, 'customer/loan_people.html',context)
+
+    return render(request, 'customer/both_customer_full_info_print.html', context)
+
+def both_partner_calculation(request,id):
+    customer = get_object_or_404(Customer, id=id)
+
+    if customer.role != 'هردو':
+        messages.warning(request, 'این صفحه فقط برای شخص هردو است')
+        return redirect(request.META.get('HTTP_REFERER', '/'))
+
+    if request.method == 'POST':
+        form = bothpartyForm(request.POST)
+        instance_form = form.save(commit=False)
+        date = form.cleaned_data.get('date_is')
+        action_type = request.POST.get('action_type')
+        amount = request.POST.get('amount')
+        
+        note = request.POST.get('note', '')
+
+        try:
+            with transaction.atomic():
+                last_row_for_save = (
+                    BothPartyLedger.objects
+                    .filter(customer=customer)
+                    .order_by('-id')
+                    .first()
+                )
+
+                prev_supplier_balance = last_row_for_save.current_supplier_balance if last_row_for_save else Decimal('0')
+                prev_customer_balance = last_row_for_save.current_customer_balance if last_row_for_save else Decimal('0')
+
+                amount = Decimal(amount or 0)
+
+                if amount <= 0:
+                    raise ValueError('مبلغ باید بیشتر از صفر باشد')
+                system_all_money = total_balance.objects.select_for_update().first()
+                if not system_all_money:
+                    raise ValueError('پول در سیستم موجود نیست')
+                first_record = Decimal(system_all_money.total_money_in_system or 0)
+                new_supplier_balance = prev_supplier_balance
+                new_customer_balance = prev_customer_balance
+
+                if action_type == 'pay_to_partner':
+                    # only when we owe him
+                    if prev_supplier_balance <= 0:
+                        raise ValueError('شما به این شخص بدهکار نیستید')
+
+                    if amount > prev_supplier_balance:
+                        raise ValueError('مبلغ پرداخت بیشتر از قرضداری شما به او است')
+
+                    if amount > first_record:
+                        raise ValueError('پول موجودی در سیستم کافی نیست')
+
+                    new_supplier_balance = prev_supplier_balance - amount
+
+                    # money goes out from system
+                    system_all_money.total_money_in_system = first_record - amount
+                    system_all_money.save()
+
+                elif action_type == 'receive_from_partner':
+                    # case 1: he owes us
+                    if prev_customer_balance > 0:
+                        if amount > prev_customer_balance:
+                            raise ValueError('مبلغ دریافت بیشتر از قرضداری او به شما است')
+
+                        new_customer_balance = prev_customer_balance - amount
+
+                    # case 2: we owe him, but he gives us money,
+                    # so reduce our debt to him
+                    elif prev_supplier_balance > 0:
+                        if amount > prev_supplier_balance:
+                            raise ValueError('مبلغ دریافت بیشتر از قرضداری ما به او است')
+
+                        new_supplier_balance = prev_supplier_balance - amount
+
+                    else:
+                        raise ValueError('هیچ قرضی برای دریافت/تصفیه موجود نیست')
+
+                    # money comes into system
+                    system_all_money.total_money_in_system = first_record + amount
+                    system_all_money.save()
+
+                else:
+                    raise ValueError('نوع عملیات معتبر نیست')
+
+                BothPartyLedger.objects.create(
+                    customer=customer,
+                    entry_type=action_type,
+                    date=date,
+                    total_amount=amount,
+                    paid_amount=amount,
+                    remain_amount=Decimal('0'),
+                    previous_supplier_balance=prev_supplier_balance,
+                    previous_customer_balance=prev_customer_balance,
+                    current_supplier_balance=new_supplier_balance,
+                    current_customer_balance=new_customer_balance,
+                    note=note
+                )
+
+                messages.success(request, 'پرداخت/دریافت موفقانه ثبت شد')
+                return redirect('Customer:both_partner_calculation', id=customer.id)
+
+        except Exception as e:
+            messages.error(request, f'خطا: {str(e)}')
+            return redirect('Customer:both_partner_calculation', id=customer.id)
+
+    ledger_rows = ( 
+        BothPartyLedger.objects
+        .filter(customer=customer)
+        .select_related('purchase', 'sale')
+        .order_by('id')
+    )
+
+    last_row = (
+        BothPartyLedger.objects
+        .filter(customer=customer)
+        .order_by('-id')
+        .first()
+    )
+
+    supplier_balance = last_row.current_supplier_balance if last_row else Decimal('0')
+    customer_balance = last_row.current_customer_balance if last_row else Decimal('0')
+
+    if supplier_balance > customer_balance:
+        net_amount = supplier_balance - customer_balance
+        net_status = 'ما قرضدار او هستیم'
+    elif customer_balance > supplier_balance:
+        net_amount = customer_balance - supplier_balance
+        net_status = 'او قرضدار ما است'
+    else:
+        net_amount = Decimal('0')
+        net_status = 'حساب تصفیه است'
+    form = bothpartyForm()
+
+    context = {
+        'customer': customer,
+        'ledger_rows': ledger_rows,
+        'supplier_balance': supplier_balance,
+        'customer_balance': customer_balance,
+        'net_amount': net_amount,
+        'net_status': net_status,
+        'form':form,
+    }
+
+    return render(request, 'customer/both_customer_full_info.html', context)
+
+from decimal import Decimal
+
+def recalculate_both_party_ledger(customer):
+    rows = (
+        BothPartyLedger.objects
+        .filter(customer=customer)
+        .order_by('id')
+    )
+
+    supplier_balance = Decimal('0')
+    customer_balance = Decimal('0')
+
+    for row in rows:
+
+        # save previous balances
+        row.previous_supplier_balance = supplier_balance
+        row.previous_customer_balance = customer_balance
+
+        # PURCHASE
+        if row.entry_type == 'purchase':
+            supplier_balance += Decimal(row.remain_amount or 0)
+
+        # SALE
+        elif row.entry_type == 'sale':
+            customer_balance += Decimal(row.remain_amount or 0)
+
+        # PAYMENT TO PARTNER
+        elif row.entry_type == 'pay_to_partner':
+            supplier_balance -= Decimal(row.total_amount or 0)
+
+        # RECEIVE FROM PARTNER
+        elif row.entry_type == 'receive_from_partner':
+            customer_balance -= Decimal(row.total_amount or 0)
+
+        # update current balances
+        row.current_supplier_balance = supplier_balance
+        row.current_customer_balance = customer_balance
+
+        row.save(update_fields=[
+            'previous_supplier_balance',
+            'previous_customer_balance',
+            'current_supplier_balance',
+            'current_customer_balance',
+        ])
 
 
-def loan_people_print(request):
-    all_customer = Customer.objects.filter(role='مشتری')
+
+
+def delete_both_party_operation(request, id):
+    try:
+        with transaction.atomic():
+            ledger_row = get_object_or_404(BothPartyLedger, id=id)
+            paid_amount = ledger_row.paid_amount
+            system_all_money = total_balance.objects.select_for_update().first()
+            first_record = Decimal(system_all_money.total_money_in_system or 0)
+
+            # Only allow deleting payment or receive records
+            if ledger_row.entry_type not in ['pay_to_partner', 'receive_from_partner']:
+                messages.error(request, "این عملیات قابل حذف نیست")
+                return redirect('Customer:both_partner_calculation', id=ledger_row.customer.id)
+
+            customer = ledger_row.customer
+            if ledger_row.entry_type == 'pay_to_partner':
+                system_all_money.total_money_in_system = first_record + paid_amount
+                system_all_money.save()
+            elif ledger_row.entry_type == 'receive_from_partner':
+                system_all_money.total_money_in_system = first_record - paid_amount
+                system_all_money.save()
+
+            ledger_row.delete()
+
+            # recalculate balances
+            recalculate_both_party_ledger(customer)
+
+            messages.success(request, "عملیات موفقانه حذف شد")
+
+            return redirect('Customer:both_partner_calculation', id=customer.id)
+
+    except Exception as e:
+        messages.error(request, f"خطا در حذف عملیات: {str(e)}")
+        return redirect('Customer:both_partner_calculation', id=customer.id)
+
+def loan_people(request):
+    latest_loans = Loan.objects.filter(
+        customer_id=OuterRef('id')
+    ).order_by('-id')
+
+    latest_ledger = BothPartyLedger.objects.filter(
+        customer_id=OuterRef('id')
+    ).order_by('-id')
+
+    customers = Customer.objects.filter(
+        role__in=['مشتری', 'هردو']
+    ).annotate(
+        total_borrow=Coalesce(
+            Subquery(latest_loans.values('total_amount')[:1]),
+            Value(Decimal('0.00')),
+            output_field=DecimalField(max_digits=14, decimal_places=2)
+        ),
+
+        supplier_balance=Coalesce(
+            Subquery(latest_ledger.values('current_supplier_balance')[:1]),
+            Value(Decimal('0.00')),
+            output_field=DecimalField(max_digits=14, decimal_places=2)
+        ),
+
+        customer_balance=Coalesce(
+            Subquery(latest_ledger.values('current_customer_balance')[:1]),
+            Value(Decimal('0.00')),
+            output_field=DecimalField(max_digits=14, decimal_places=2)
+        ),
+    ).annotate( 
+        ledger_due=Case(
+            When(
+                customer_balance__gt=F('supplier_balance'),
+                then=F('customer_balance') - F('supplier_balance')
+            ),
+            default=Value(Decimal('0.00')),
+            output_field=DecimalField(max_digits=14, decimal_places=2)
+        )
+    ).annotate(
+        customer_due=Case(
+            When(role='مشتری', then=F('total_borrow')),
+            When(role='هردو', then=F('ledger_due')),
+            default=Value(Decimal('0.00')),
+            output_field=DecimalField(max_digits=14, decimal_places=2)
+        )
+    ).filter(
+        customer_due__gt=0
+    ).order_by('name')
+
     loan_data = []
 
-    for c in all_customer:
-        find_loan_record = Loan.objects.filter(
-            customer=c,
-            total_amount__gt=0
-        ).last()
-        
-        if find_loan_record:
-            loan_data.append({
-                'name':c.name,
-                'loan_amount':find_loan_record.total_amount if find_loan_record else 0,
-            })
-        else:
-            pass
+    for c in customers:
+        loan_data.append({
+            'name': c.name,
+            'role': c.role,
+            'loan_amount': c.customer_due,
+        })
 
+    total_sum = customers.aggregate(
+        total=Coalesce(
+            Sum('customer_due'),
+            Value(Decimal('0.00')),
+            output_field=DecimalField(max_digits=14, decimal_places=2)
+        )
+    )['total']
 
     context = {
         'loan_data': loan_data,
+        'total_sum': total_sum,
+    }
+
+    return render(request, 'customer/loan_people.html', context)
+
+def loan_people_print(request):
+    latest_loans = Loan.objects.filter(
+        customer_id=OuterRef('id')
+    ).order_by('-id')
+
+    latest_ledger = BothPartyLedger.objects.filter(
+        customer_id=OuterRef('id')
+    ).order_by('-id')
+
+    customers = Customer.objects.filter(
+        role__in=['مشتری', 'هردو']
+    ).annotate(
+        total_borrow=Coalesce(
+            Subquery(latest_loans.values('total_amount')[:1]),
+            Value(Decimal('0.00')),
+            output_field=DecimalField(max_digits=14, decimal_places=2)
+        ),
+        supplier_balance=Coalesce(
+            Subquery(latest_ledger.values('current_supplier_balance')[:1]),
+            Value(Decimal('0.00')),
+            output_field=DecimalField(max_digits=14, decimal_places=2)
+        ),
+        customer_balance=Coalesce(
+            Subquery(latest_ledger.values('current_customer_balance')[:1]),
+            Value(Decimal('0.00')),
+            output_field=DecimalField(max_digits=14, decimal_places=2)
+        ),
+    ).annotate(
+        ledger_due=Case(
+            When(
+                customer_balance__gt=F('supplier_balance'),
+                then=F('customer_balance') - F('supplier_balance')
+            ),
+            default=Value(Decimal('0.00')),
+            output_field=DecimalField(max_digits=14, decimal_places=2)
+        )
+    ).annotate(
+        customer_due=Case(
+            When(role='مشتری', then=F('total_borrow')),
+            When(role='هردو', then=F('ledger_due')),
+            default=Value(Decimal('0.00')),
+            output_field=DecimalField(max_digits=14, decimal_places=2)
+        )
+    ).filter(
+        customer_due__gt=0
+    ).order_by('name')
+
+    loan_data = []
+
+    for c in customers:
+        loan_data.append({
+            'name': c.name,
+            'role': c.role,
+            'loan_amount': c.customer_due,
+        })
+
+    total_sum = customers.aggregate(
+        total=Coalesce(
+            Sum('customer_due'),
+            Value(Decimal('0.00')),
+            output_field=DecimalField(max_digits=14, decimal_places=2)
+        )
+    )['total']
+
+    context = {
+        'loan_data': loan_data,
+        'total_sum': total_sum,
     }
 
     return render(request, 'customer/loan_people_print.html', context)

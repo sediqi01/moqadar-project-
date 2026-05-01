@@ -56,17 +56,28 @@
                                     <th style="background-color: black; color: white;">توضیحات</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                {% for i in loan_data %}
+                             <tbody>
+                                {% for row in loan_data %}
                                 <tr>
-                                    
                                     <td>{{ forloop.counter }}</td>
-                                    <td>{{ i.name }}</td>
-                                    <td>{{ i.loan_amount }}</td>
+                                    <td>{{ row.partner.name_opf }}</td>
+                                    <td>
+                                        {% for record in row.records %}
+                                            <span >
+                                                {{ record.total_incme_with_last_record }}
+                                                {{ record.curr.curr_name }}
+                                            </span>
+                                        {% endfor %}
+                                    </td>
                                     <td></td>
                                 </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-muted">
+                                        هیچ قرضی موجود نیست
+                                    </td>
+                                </tr>
                                 {% endfor %}
-                                
                             </tbody>
                         </table>
                     </div>

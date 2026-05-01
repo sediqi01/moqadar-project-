@@ -152,154 +152,210 @@
         {% endfor %}
     </div>
     <style>
-        /* ===== TABLE NAV BUTTONS ===== */
+    /* ===== STATIC LEFT TABLE NAV BUTTONS ===== */
+    #table-nav {
+        position: fixed;
+        top: 50%;
+        left: 14px;              /* left side */
+        right: auto;
+        transform: translateY(-50%);
+        z-index: 9999;
+
+        background-color: #ffffff;
+        padding: 10px;
+        border-radius: 18px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .circle-btn {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        border: none;
+        cursor: pointer;
+
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+
+        font-size: 22px;
+        box-shadow: 0 6px 14px rgba(0,0,0,0.25);
+        transition: all 0.3s ease;
+    }
+
+    .circle-btn:hover {
+        transform: scale(1.08);
+    }
+
+    .circle-btn .icon {
+        font-size: 20px;
+    }
+
+    .circle-btn .text {
+        font-size: 11px;
+        margin-top: 4px;
+        font-weight: 600;
+        color: #000;
+    }
+
+    .btn-table-1 { background: #73f07e; }
+    .btn-table-2 { background: #7ec5f8; }
+    .btn-table-3 { background: #ffa91f; }
+
+    @media (max-width: 768px) {
         #table-nav {
-            position: fixed;
-            top: 50%;
-            right: 20px;
-            transform: translateY(-50%);
-            z-index: 9999;
-
-            background-color: #ffffff;
-            padding: 10px;
-            border-radius: 16px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.25);
-
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-
-            touch-action: none; /* important for mobile drag */
+            left: 8px;
+            padding: 8px;
         }
 
-            /* Circle buttons */
-            .circle-btn {
-                width: 60px;
-                height: 60px;
-                border-radius: 50%;
-                border: none;
-                cursor: pointer;
+        .circle-btn {
+            width: 52px;
+            height: 52px;
+        }
 
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
+        .circle-btn .text {
+            display: none;
+        }
+    }
+</style>
 
-                font-size: 22px;
-                box-shadow: 0 6px 14px rgba(0,0,0,0.25);
-                transition: all 0.3s ease;
-            }
-
-            /* Hover effect */
-            .circle-btn:hover {
-                transform: scale(1.08);
-            }
-
-            /* Icon */
-            .circle-btn .icon {
-                font-size: 20px;
-            }
-
-            /* Text */
-            .circle-btn .text {
-                font-size: 11px;
-                margin-top: 4px;
-                font-weight: 600;
-                color: #000;
-            }
-
-            /* Individual colors */
-            .btn-table-1 { background: #73f07e; }
-            .btn-table-2 { background: #7ec5f8; }
-            .btn-table-3 { background: #ffa91f; }
-
-            /* Mobile fix */
-            @media (max-width: 768px) {
-                #table-nav {
-                    right: 10px;
-                    padding: 8px;
-                }
-
-                .circle-btn {
-                    width: 52px;
-                    height: 52px;
-                }
-
-                .circle-btn .text {
-                    display: none; /* icons only on mobile */
-                }
-            }
-    </style>
-   <div class="d-flex justify-content-center gap-3 mb-4" id="table-nav">
-
-    <button class="circle-btn btn-table-1" onclick="scrollToTable('table-one')">
+<div id="table-nav">
+    <button type="button" class="circle-btn btn-table-1" onclick="scrollToTable('table-one')">
         <span class="icon">💰</span>
-        <span class="text" style="color: black;">مالی</span>
+        <span class="text">مالی</span>
     </button>
 
-    <button class="circle-btn btn-table-2" onclick="scrollToTable('table-three')">
+    <button type="button" class="circle-btn btn-table-2" onclick="scrollToTable('table-three')">
         <span class="icon">👥</span>
-        <span class="text" style="color: black;">خرید</span>
+        <span class="text">خرید</span>
     </button>
 
-    <button class="circle-btn btn-table-3" onclick="scrollToTable('table-two')">
+    <button type="button" class="circle-btn btn-table-3" onclick="scrollToTable('table-two')">
         <span class="icon">🚚</span>
-        <span class="text" style="color: black;">فروش</span>
+        <span class="text">فروش</span>
     </button>
-
 </div>
 
+<script>
+    function scrollToTable(tableId) {
+        const table = document.getElementById(tableId);
+
+        if (table) {
+            table.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
+        }
+    }
+</script><style>
+    /* ===== STATIC LEFT TABLE NAV BUTTONS ===== */
+    #table-nav {
+        position: fixed;
+        top: 50%;
+        left: 14px;              /* left side */
+        right: auto;
+        transform: translateY(-50%);
+        z-index: 9999;
+
+        background-color: #ffffff;
+        padding: 10px;
+        border-radius: 18px;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .circle-btn {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        border: none;
+        cursor: pointer;
+
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+
+        font-size: 22px;
+        box-shadow: 0 6px 14px rgba(0,0,0,0.25);
+        transition: all 0.3s ease;
+    }
+
+    .circle-btn:hover {
+        transform: scale(1.08);
+    }
+
+    .circle-btn .icon {
+        font-size: 20px;
+    }
+
+    .circle-btn .text {
+        font-size: 11px;
+        margin-top: 4px;
+        font-weight: 600;
+        color: #000;
+    }
+
+    .btn-table-1 { background: #73f07e; }
+    .btn-table-2 { background: #7ec5f8; }
+    .btn-table-3 { background: #ffa91f; }
+
+    @media (max-width: 768px) {
+        #table-nav {
+            left: 8px;
+            padding: 8px;
+        }
+
+        .circle-btn {
+            width: 52px;
+            height: 52px;
+        }
+
+        .circle-btn .text {
+            display: none;
+        }
+    }
+</style>
+
+<div id="table-nav">
+    <button type="button" class="circle-btn btn-table-1" onclick="scrollToTable('table-one')">
+        <span class="icon">💰</span>
+        <span class="text">مالی</span>
+    </button>
+
+    <button type="button" class="circle-btn btn-table-2" onclick="scrollToTable('table-three')">
+        <span class="icon">👥</span>
+        <span class="text">خرید</span>
+    </button>
+
+    <button type="button" class="circle-btn btn-table-3" onclick="scrollToTable('table-two')">
+        <span class="icon">🚚</span>
+        <span class="text">فروش</span>
+    </button>
+</div>
 
 <script>
-const nav = document.getElementById("table-nav");
+    function scrollToTable(tableId) {
+        const table = document.getElementById(tableId);
 
-let isDragging = false;
-let offsetX, offsetY;
-
-nav.addEventListener("mousedown", startDrag);
-nav.addEventListener("touchstart", startDrag);
-
-document.addEventListener("mousemove", drag);
-document.addEventListener("touchmove", drag);
-
-document.addEventListener("mouseup", endDrag);
-document.addEventListener("touchend", endDrag);
-
-function startDrag(e) {
-    isDragging = true;
-    const rect = nav.getBoundingClientRect();
-
-    if (e.touches) {
-        offsetX = e.touches[0].clientX - rect.left;
-        offsetY = e.touches[0].clientY - rect.top;
-    } else {
-        offsetX = e.clientX - rect.left;
-        offsetY = e.clientY - rect.top;
+        if (table) {
+            table.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
+        }
     }
-}
-
-function drag(e) {
-    if (!isDragging) return;
-
-    let x, y;
-    if (e.touches) {
-        x = e.touches[0].clientX;
-        y = e.touches[0].clientY;
-    } else {
-        x = e.clientX;
-        y = e.clientY;
-    }
-
-    nav.style.left = (x - offsetX) + "px";
-    nav.style.top = (y - offsetY) + "px";
-    nav.style.right = "auto";
-    nav.style.transform = "none";
-}
-
-function endDrag() {
-    isDragging = false;
-}
 </script>
+
+
 
 
     <div class="main-content-wrap mobile-menu-content bg-off-white">
@@ -315,10 +371,11 @@ function endDrag() {
                                 <th scope="col">#</th>
                                 <th scope="col">نوعیت</th>
                                 <th scope="col">نام</th>
+                                <th scope="col">توضیحات</th>
                                 <th scope="col">تاریخ</th>
                                 <th scope="col">مقدار</th>
                                 <th scope="col">واحد پولی</th>
-                                <th scope="col">توضیحات</th>
+                                
                                 <th scope="col" class="no-print">عملیات</th>
                             </tr>
                         </thead>
@@ -333,10 +390,11 @@ function endDrag() {
                                 <td><span class="badge ">برداشت</span></td>
                                 {% endif %}
                                 <td> {{i.olabrate}} </td>
+                                <td>{{i.descriiption}}</td>
                                 <td>{{i.rec_date}}</td>
                                 <td>{{ i.income_amount }}</td>
                                 <td>{{ i.curr.curr_name }}</td>
-                                <td>{{i.descriiption}}</td>
+                                
                                 <td class="no-print">
                                     <div class="btn-group">
                                         <button class="btn bg-white _r_btn" type="button" data-toggle="dropdown"
@@ -478,6 +536,7 @@ function endDrag() {
                                 <tr>
                                     <th>شماره</th>
                                     <th>اسم مشتری</th>
+                                    <th>توضیحات</th>
                                     <th>تاریخ</th>
                                     <th>محصول</th>
                                     <th>تعداد</th>
@@ -487,7 +546,7 @@ function endDrag() {
                                     <th>رسید</th>
                                     <th>باقی</th>
                                     <th>مجموعه باقیمانده</th>
-                                    <th>توضیحات</th>
+                                    
                                 </tr>
                             </thead>
                             <tbody id="tableBody">
@@ -502,6 +561,13 @@ function endDrag() {
                                                     {{ loan.customer.name }}
                                                 </a>
                                             </td>
+                                            {% if loan.status == 'پرداخت نه شده' %}
+                                                
+                                                <td>{{ loan.sale_id.notes }}</td>
+                                            {% elif loan.status == 'پرداخت شده' %}
+                                                
+                                                <td>{{ loan.notes }} {{ loan.sale_id.notes }}</td>
+                                            {% endif %}
                                            
                                             <td>{{ loan.date_issued }}</td>
                                             <td>{{ loan.sale_id.product.meat_name }}</td>
@@ -520,13 +586,44 @@ function endDrag() {
                                                 </td>
                                                 <td class="heading text-danger">{{ loan.sale_id.borrow_amount }}</td>
                                                 <td>{{ loan.total_amount }}</td>
-                                                <td>{{ loan.sale_id.notes }}</td>
+                                                
                                             {% elif loan.status == 'پرداخت شده' %}
                                                 <td class="heading text-success">{{ loan.amount }}</td>
                                                 <td class="heading text-danger">{{ loan.sale_id.borrow_amount }}</td>
                                                 <td>{{ loan.total_amount }}</td>
-                                                <td>{{ loan.notes }} {{ loan.sale_id.notes }}</td>
+                                                
                                             {% endif %}
+                                        </tr>
+                                    {% endfor %} 
+                                        {% for loan in bot_ledger_entry %}
+                                        <tr>
+                                            <td>{{ loan.id }}</td>
+                                            <td>
+                                                <a href="{% url 'Customer:both_partner_calculation' loan.customer.id %}" class="text-decoration-none text-primary">
+                                                    {{ loan.customer.name }}
+                                                </a>
+                                            </td>
+                                            <td>{{ loan.sale.notes }}</td>
+                                           
+                                            <td>{{ loan.date }}</td>
+                                            <td>{{ loan.sale.product.meat_name }}</td>
+                                            <td>{{ loan.sale.quantity }}</td>
+                                            <td>{{ loan.sale.weight }}</td>
+                                            <td>{{ loan.sale.price_per_unit }}</td>
+                                            <td>{{ loan.sale.should_paid }}</td>
+                                            
+                                            <td class="heading text-success">
+                                               
+                                                {{ loan.paid_amount }}
+                                                
+                                                
+                                            </td>
+                                            <td class="heading text-danger">{{ loan.remain_amount }}</td>
+                                            <td>{{ loan.sale.total_amount }}</td>
+                                            
+                                            
+                                                
+                                           
                                         </tr>
                                     {% endfor %} 
                     
@@ -707,6 +804,7 @@ function endDrag() {
                                         <tr>
                                             <th>شماره</th>
                                             <th>اسم تامین کننده</th>
+                                            <th> توضیحات</th>
                                             <th style="font-family: XW_Zar_Bd_0;">تاریخ</th>
                                             <th> محصول</th>
                                             <th>تعداد</th>
@@ -716,7 +814,7 @@ function endDrag() {
                                             <th> رسید</th>
                                             <th> باقی </th>
                                             <th>مجموعه باقیمانده</th>
-                                            <th> توضیحات</th>
+                                            
                                         </tr>
                                         
                                     </thead>
@@ -737,6 +835,13 @@ function endDrag() {
                                                     </a>
                                                 </td>
                                                 {% if i.status == 'پرداخت نه شده' %}
+                                                    
+                                                    <td>{{i.sale_id.details}}</td>
+                                                {% elif i.status == 'پرداخت شده' %}
+                                                    
+                                                    <td>{{i.notes}} {{i.sale_id.details}}</td>
+                                                {% endif %}
+                                                {% if i.status == 'پرداخت نه شده' %}
                                                 <td>{{i.date_issued}}</td>
                                                 {% elif i.status == 'پرداخت شده' %}
                                                 <td>{{i.date_issued}}</td>
@@ -750,7 +855,7 @@ function endDrag() {
                                                     <td class="heading text-success">{{i.sale_id.paid_amount}}</td>
                                                     <td class="heading text-danger">{{i.sale_id.remain_amount}}</td>
                                                     <th>{{i.total_amount}}</th>
-                                                    <td>{{i.sale_id.details}}</td>
+                                                  
                                                 {% elif i.status == 'پرداخت شده' %}
                                                     <td>{{i.sale_id.product.meat_name}}</td>
                                                     <td>{{i.sale_id.quantity}}</td>
@@ -760,30 +865,37 @@ function endDrag() {
                                                     <td class="heading text-success">{{i.amount}}</td>
                                                     <td class="heading text-danger">{{i.sale_id.remain_amount}}</td>
                                                     <th>{{i.total_amount}}</th>
-                                                    <td>{{i.notes}} {{i.sale_id.details}}</td>
+                                                    
                                                 {% endif %}
                                             </tr>
                                             {% endfor %}
-                            
-                                            <!-- <tr class="group-footer" style="background-color: rgb(44, 44, 143);">
-                                                <th style="color: white;">مجموعه پرداخت شده</th>
-                                                <th colspan="6"></th>
-                                                <th style="color: rgb(0, 255, 34);"></th>
-                                                <th style="color: white;">مجموعه باقی</th>
+                                            {% for i in purchase_both_ledger_entry %}
+                                            <tr class="data-row">
+                                                <td>{{i.id}} </td>
+                                                <td>
+                                                    <a href="{% url 'Customer:both_partner_calculation' i.customer.id %}" class="text-decoration-none text-primary">
+                                                        {{ i.customer.name }}
+                                                    </a>
+                                                </td>
+                                                <td>{{i.purchase.details}}</td>
                                                 
-                                                {% with group.list|last as last_loan %}
-                                                    <th style="color: rgb(255, 0, 0);">{{ last_loan.total_amount }}</th>
-                                                    {% if last_loan.total_amount > 0 %}
-                                                        <th style="color: rgb(255, 0, 0);">
-                                                            <a class="btn btn-raised btn-raised-success" href="/Supplaier/paid_supp_loans/{{ group.grouper.id }}/">
-                                                                پرداخت قرض
-                                                            </a>
-                                                        </th>   
-                                                    {% else %}
-                                                        <th></th>
-                                                    {% endif %}
-                                                {% endwith %}
-                                            </tr> -->
+                                                <td>{{i.date}}</td>
+                                                
+                                              
+                                                <td>{{i.purchase.product.meat_name}}</td>
+                                                <td>{{i.purchase.quantity}}</td>
+                                                <td>{{i.purchase.wegiht}}</td>
+                                                <td>{{i.purchase.price_per_unit}}</td>
+                                                <td>{{i.purchase.total_unit }}</td>
+                                                <td class="heading text-success">{{i.paid_amount}}</td>
+                                                <td class="heading text-danger">{{i.remain_amount}}</td>
+                                                <th>{{i.purchase.total_amount}}</th>
+                                                
+                                               
+                                            </tr>
+                                            {% endfor %}
+                            
+                                            
                                     </tbody>
                                 </table>
                             

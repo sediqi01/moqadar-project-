@@ -1,0 +1,473 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block content %}
+
+
+
+
+<div class="main-content">
+    <div class="page-content">
+        <div class="container-fluid">
+
+            <div class="row mb-3" style="margin-top: 73px;">
+                <div class="col-12 d-flex justify-content-between align-items-center flex-wrap">
+                    <div>
+                        <h3 class="mb-1">معلومات کامل شخص به نام {{ customer.name }}   این شخص هم فروشنده و هم خریدار است</h3>
+                        <p class="text-muted mb-0">
+                            نام: <strong>{{ customer.name }}</strong> |
+                            شماره: <strong>{{ customer.phone }}</strong> |
+                            آدرس: <strong>{{ customer.address|default:"-" }}</strong>
+                        </p>
+                    </div>
+
+                    <div class="mt-2 mt-md-0">
+                        <a href="javascript:history.back()" class="btn btn-primary">
+                            بازگشت
+                        </a>
+                        {% if net_amount == 0 %}
+                       
+                        {% else %}
+                        <button type="button" class="btn btn-success" data-toggle="modal" data-target="#paymentModal">
+                            ثبت پرداخت / دریافت
+                        </button>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3 text-end">
+    <a href="{% url 'Customer:both_partner_calculation_print' customer.id %}" 
+       target="_blank"
+       class="btn btn-dark">
+        <i class="fas fa-print me-1"></i>
+        چاپ
+    </a>
+</div>
+                </div>
+            </div>
+
+            <style>
+                .summary-card{
+                    border: none;
+                    border-radius: 16px;
+                    box-shadow: 0 4px 18px rgba(0,0,0,.08);
+                    overflow: hidden;
+                }
+                .summary-card .card-body{
+                    padding: 22px;
+                }
+                .summary-title{
+                    font-size: 14px;
+                    color: #6c757d;
+                    margin-bottom: 8px;
+                }
+                .summary-value{
+                    font-size: 28px;
+                    font-weight: 700;
+                    margin-bottom: 0;
+                }
+                .section-card{
+                    border: none;
+                    border-radius: 16px;
+                    box-shadow: 0 4px 18px rgba(0,0,0,.08);
+                    overflow: hidden;
+                    margin-bottom: 24px;
+                }
+                .section-card .card-header{
+                    background: #fff;
+                    border-bottom: 1px solid #eee;
+                    font-weight: 700;
+                    padding: 16px 20px;
+                }
+                .table thead th{
+                    white-space: nowrap;
+                    background: #f8f9fa;
+                    vertical-align: middle;
+                }
+                .table td{
+                    vertical-align: middle;
+                }
+                .badge-soft-success{
+                    background: rgba(25,135,84,.12);
+                    color: #198754;
+                    padding: 8px 12px;
+                    border-radius: 30px;
+                }
+                .badge-soft-danger{
+                    background: rgba(220,53,69,.12);
+                    color: #dc3545;
+                    padding: 8px 12px;
+                    border-radius: 30px;
+                }
+                .badge-soft-primary{
+                    background: rgba(13,110,253,.12);
+                    color: #0d6efd;
+                    padding: 8px 12px;
+                    border-radius: 30px;
+                }
+                .badge-soft-warning{
+                    background: rgba(255,193,7,.18);
+                    color: #9a6b00;
+                    padding: 8px 12px;
+                    border-radius: 30px;
+                }
+                .info-box{
+                    background: linear-gradient(135deg, #0d6efd, #3b82f6);
+                    color: #fff;
+                    border-radius: 16px;
+                    padding: 24px;
+                    box-shadow: 0 4px 18px rgba(0,0,0,.08);
+                }
+                .info-box h4, .info-box p{
+                    color: #fff;
+                }
+                .small-muted{
+                    font-size: 13px;
+                    color: #6c757d;
+                }
+            </style>
+
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <div class="card summary-card">
+                        <div class="card-body">
+                            <div class="summary-title">خرید</div>
+                            <p class="summary-value text-danger">{{ supplier_balance|floatformat:2 }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-3 mb-3">
+                    <div class="card summary-card">
+                        <div class="card-body">
+                            <div class="summary-title">فروش</div>
+                            <p class="summary-value text-success">{{ customer_balance|floatformat:2 }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-3 mb-3">
+                    <div class="card summary-card">
+                        <div class="card-body">
+                            <div class="summary-title">خالص حساب</div>
+                            <p class="summary-value text-primary">{{ net_amount|floatformat:2 }}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-3 mb-3">
+                    <div class="info-box h-100">
+                        <h4 class="mb-2">نتیجه نهایی</h4>
+                        <p class="mb-0" style="font-size:18px; font-weight:700;">{{ net_status }}</p>
+                    </div>
+                </div>
+            </div>
+            {% if messages %}
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} text-center h3" role="alert">
+                    {{ message }}
+                </div>
+                <script>
+                    setTimeout(function () {
+                        $('.alert').fadeOut('slow');
+                    }, 8000); 
+                </script>
+                {% endfor %}
+                {% endif %}
+
+            <div class="card section-card" id="ledger-print-area">
+                <div class="card-header">
+                    دفتر حساب {{ customer.name }}
+                </div>
+                <div class="card-body table-responsive">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">لیست ریکاردها</h5>
+
+                        <select id="rowsPerPage" class="form-select" style="width: 120px;">
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                            <option value="150">150</option>
+                            <option value="200">200</option>
+                        </select>
+                    </div>
+                    <table id="myTable" class="table table-bordered table-hover text-center align-middle">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>تاریخ</th>
+                                <th>نوع</th>
+                                <th>محصول</th>
+                                <th>تعداد</th>
+                                <th>وزن</th>
+                                <th>مجموعه</th>
+                                <th>پرداخت</th>
+                                <th>باقی</th>
+                                <!-- <th>بیلانس قبلی خرید</th> -->
+                                <!-- <th>بیلانس قبلی فروش</th> -->
+                                <th>بیلانس فعلی خرید</th>
+                                <th>بیلانس فعلی فروش</th>
+                                <th>شماره خرید</th>
+                                <th>شماره فروش</th>
+                                <th>نوت</th>
+                                <th>عملیات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in ledger_rows %}
+                            <tr
+                                {% if row.entry_type == 'purchase' %}
+                                    class="table-warning"
+                                <!-- {% elif row.entry_type == 'sale' %}
+                                    class="table-primary" -->
+                                {% elif row.entry_type == 'pay_to_partner' %}
+                                    class="table-warning"
+                                <!-- {% elif row.entry_type == 'receive_from_partner' %}
+                                    style="background-color: green;" -->
+                                {% endif %}
+                                >
+                                <td>{{ row.id }}</td>
+                                <td>{{ row.date|default:"-" }}</td>
+                                <td>
+                                    {% if row.entry_type == 'purchase' %}
+                                        <span class="badge-soft-warning">خرید</span>
+                                    {% elif row.entry_type == 'sale' %}
+                                        <span class="badge-soft-primary">فروش</span>
+                                    {% elif row.entry_type == 'pay_to_partner' %}
+                                        <span style="color: rgb(0, 0, 0);">پرداخت به او</span>
+                                    {% elif row.entry_type == 'receive_from_partner' %}
+                                        <span style="color: rgb(0, 0, 0);">دریافت از او</span>
+                                    {% else %}
+                                        <span class="badge-soft-primary">{{ row.entry_type }}</span>
+                                    {% endif %}
+                                </td>
+                                {% if row.entry_type == 'purchase' %}
+                                    <td>{{ row.purchase.product.meat_name }}</td>
+                                {% elif row.entry_type == 'sale' %}
+                                    <td>{{ row.sale.product.meat_name }}</td>
+                                {% else %}
+                                    <td>-</td>
+                                {% endif %}
+
+                                {% if row.entry_type == 'purchase' %}
+                                    {% if row.purchase.status == 'ضرب تعداد' %}
+                                        <td style="color: blue;">{{ row.purchase.quantity }}</td>
+                                    {% else %}
+                                        <td>{{ row.purchase.quantity }}</td>
+                                    {% endif %}
+                                {% elif row.entry_type == 'sale' %}
+                                    {% if row.sale.status == 'ضرب تعداد' %}
+                                    <td style="color: blue;">{{ row.sale.quantity }}</td>
+                                    {% else %}
+                                    <td>{{ row.sale.quantity }}</td>
+                                    {% endif %}
+                                {% else %}
+                                    <td>-</td>
+                                {% endif %}
+
+                                {% if row.entry_type == 'purchase' %}
+                                    {% if row.purchase.status == 'ضرب وزن' %}
+                                        <td style="color: blue;">{{ row.purchase.wegiht }}</td>
+                                    {% else %}
+                                        <td>{{ row.purchase.wegiht }}</td>
+                                    {% endif %}
+                                {% elif row.entry_type == 'sale' %}
+                                    {% if row.sale.status == 'ضرب وزن' %}
+                                        <td style="color: blue;">{{ row.sale.weight }}</td>
+                                    {% else %}
+                                        <td>{{ row.sale.weight }}</td>
+                                    {% endif %}
+                                {% else %}
+                                    <td>-</td>
+                                {% endif %}
+                                
+                                <td>{{ row.total_amount|floatformat:2 }}</td>
+                                <td>{{ row.paid_amount|floatformat:2 }}</td>
+                                <td>{{ row.remain_amount|floatformat:2 }}</td>
+                                <!-- <td>{{ row.previous_supplier_balance|floatformat:2 }}</td> -->
+                                <!-- <td>{{ row.previous_customer_balance|floatformat:2 }}</td> -->
+                                <td>{{ row.current_supplier_balance|floatformat:2 }}</td>
+                                <td>{{ row.current_customer_balance|floatformat:2 }}</td>
+                                <td>
+                                    {% if row.purchase %}
+                                        {{ row.purchase.id }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if row.sale %}
+                                        {{ row.sale.id }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td>{{row.note}}</td>
+                                <td>
+                                    {% if row.entry_type == 'pay_to_partner' or row.entry_type == 'receive_from_partner' %}
+                                    <a href="{% url 'Customer:delete_both_party_operation' row.id %}"
+                                    onclick="return confirm('آیا مطمئن هستید؟')"
+                                    class="text-danger">
+                                    <i class="fas fa-trash"></i>
+                                    </a>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="12" class="text-center text-muted">هیچ ریکاردی موجود نیست</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="paymentModal" tabindex="-1" aria-labelledby="paymentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content" style="border-radius:16px; overflow:hidden;">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title" id="paymentModalLabel">ثبت پرداخت / دریافت</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <form method="post">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="row">
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">نوع عملیات</label>
+                            <select name="action_type" class="form-control" required>
+                                <option value="">انتخاب کنید</option>
+                                <option value="pay_to_partner">پرداخت به او</option>
+                                <option value="receive_from_partner">دریافت از او</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">مبلغ</label>
+                            <input type="number" step="0.01" min="0" name="amount" class="form-control" required>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">تاریخ</label>
+                            {{form.date_is}}
+                        </div>
+                        <script>
+                            document.addEventListener('DOMContentLoaded', function () {
+                                $('#datepicker13').datepicker({
+
+                                });
+                            });
+                            </script>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">توضیحات</label>
+                            <input type="text" name="note" class="form-control" placeholder="توضیحات ...">
+                        </div>
+
+                    </div>
+
+                    <div class="row mt-2">
+                        <div class="col-md-6">
+                            <div class="alert alert-danger mb-0">
+                                بدهکاری ما به او: <strong>{{ supplier_balance|floatformat:2 }}</strong>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert alert-success mb-0">
+                                بدهکاری او به ما: <strong>{{ customer_balance|floatformat:2 }}</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">بستن</button>
+                    <button type="submit" class="btn btn-success">ثبت</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+    function printLedgerTable() {
+        const today = new Date();
+        const formatted = today.getFullYear() + '/' +
+            String(today.getMonth() + 1).padStart(2, '0') + '/' +
+            String(today.getDate()).padStart(2, '0') + ' ' +
+            String(today.getHours()).padStart(2, '0') + ':' +
+            String(today.getMinutes()).padStart(2, '0');
+
+        const printDateEl = document.getElementById('print-date');
+        if (printDateEl) {
+            printDateEl.textContent = formatted;
+        }
+
+        window.print();
+    }
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    const table = document.getElementById("myTable");
+    const rows = table.querySelectorAll("tbody tr");
+    const rowsPerPageSelect = document.getElementById("rowsPerPage");
+    const paginationDiv = document.getElementById("pagination");
+
+    let currentPage = 1;
+    let rowsPerPage = parseInt(rowsPerPageSelect.value);
+
+    function displayRows() {
+        rows.forEach((row, index) => {
+            row.style.display = "none";
+        });
+
+        let start = (currentPage - 1) * rowsPerPage;
+        let end = start + rowsPerPage;
+
+        for (let i = start; i < end && i < rows.length; i++) {
+            rows[i].style.display = "";
+        }
+    }
+
+    function setupPagination() {
+        paginationDiv.innerHTML = "";
+
+        let pageCount = Math.ceil(rows.length / rowsPerPage);
+
+        for (let i = 1; i <= pageCount; i++) {
+            let btn = document.createElement("button");
+            btn.innerText = i;
+            btn.className = "btn btn-sm btn-outline-primary mx-1";
+
+            if (i === currentPage) {
+                btn.classList.add("active");
+            }
+
+            btn.addEventListener("click", function () {
+                currentPage = i;
+                displayRows();
+                setupPagination();
+            });
+
+            paginationDiv.appendChild(btn);
+        }
+    }
+
+    rowsPerPageSelect.addEventListener("change", function () {
+        rowsPerPage = parseInt(this.value);
+        currentPage = 1;
+        displayRows();
+        setupPagination();
+    });
+
+    // initial load
+    displayRows();
+    setupPagination();
+});
+</script>
+{% endblock %}

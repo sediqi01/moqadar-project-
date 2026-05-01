@@ -72,21 +72,31 @@
                 <th >#</th>
                 <th >نام مشتری</th>
                 <th >مقدار پول</th>
+             
                 <th >توضیحات</th>
             </tr>
         </thead>
         <tbody>
-            {% for i in loan_data %}
-            <tr>
-
-                <td>{{ forloop.counter }}</td>
-                <td>{{ i.name }}</td>
-                <td>{{ i.loan_amount }}</td>
-                <td></td>
-            </tr>
+    {% for row in loan_data %}
+    <tr>
+        <td>{{ forloop.counter }}</td>
+        <td>{{ row.partner.name_opf }}</td>
+        <td>
+            {% for record in row.records %}
+                <div>
+                    {{ record.total_incme_with_last_record }}
+                    {{ record.curr.curr_name }}
+                </div>
             {% endfor %}
-
-        </tbody>
+        </td>
+        <td></td>
+    </tr>
+    {% empty %}
+    <tr>
+        <td colspan="3">هیچ قرضی موجود نیست</td>
+    </tr>
+    {% endfor %}
+</tbody>
     </table>
     <script>
     window.onload = function () {

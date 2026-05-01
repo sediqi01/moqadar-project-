@@ -50,43 +50,177 @@ def warehouse_part(request):
 
 
 
+# def ware_data(request,id):
+#     all_date = inventrories.objects.filter(warehouse_foerignkey=id).order_by('id')
+#     warejouse = warehouse_info.objects.get(id=id)
+#     find_Purchase_date = (
+#         inventrories.objects.filter(warehouse_foerignkey=id, in_and_out='IN')
+#         .values('product_foerignkey', 'product_foerignkey__meat_name')
+#         .annotate(
+#             total_weight_in_Purchase=Sum('weight_field'),
+#             total_quantity_in_Purchase=Sum('Quantity')
+#         )
+#     )
+#     find_sell_date = (
+#         inventrories.objects.filter(warehouse_foerignkey=id, in_and_out='OUT')
+#         .values('product_foerignkey', 'product_foerignkey__meat_name')
+#         .annotate(
+#             total_weight_in_sell=Sum('weight_field'),
+#             total_quantity_in_sell=Sum('Quantity')
+#         )
+#     )
+
+#     sell_dict = {item['product_foerignkey']: item for item in find_sell_date}
+
+#     results = []
+#     for Purchase_item in find_Purchase_date:
+#         product_id = Purchase_item['product_foerignkey']
+#         meat_name = Purchase_item['product_foerignkey__meat_name']
+        
+#         sell_item = sell_dict.get(product_id, {'total_weight_in_sell': 0, 'total_quantity_in_sell': 0})
+
+#         mines_from_Purchase_to_sell = sell_item['total_weight_in_sell'] - Purchase_item['total_weight_in_Purchase']
+#         mines_quantity_to_sell = sell_item['total_quantity_in_sell'] - Purchase_item['total_quantity_in_Purchase']
+
+#         results.append({
+#             'meat_name': meat_name,
+#             'mines_from_Purchase_to_sell': mines_from_Purchase_to_sell,
+#             'mines_quantity_to_sell': mines_quantity_to_sell,
+#         })
+#     in_totals = inventrories.objects.filter(in_and_out='IN',warehouse_foerignkey=id).values(
+#         'product_foerignkey__meat_name'
+#     ).annotate(
+#         total_quantity_in=Sum('Quantity'),
+#         total_weight_in=Sum('weight_field')
+#     )
+#     out_totals = inventrories.objects.filter(in_and_out='OUT',warehouse_foerignkey=id).values(
+#         'product_foerignkey__meat_name'
+#     ).annotate(
+#         total_quantity_out=Sum('Quantity'),
+#         total_weight_out=Sum('weight_field')
+#     )
+#     product_names = set([x['product_foerignkey__meat_name'] for x in in_totals] +
+#                         [x['product_foerignkey__meat_name'] for x in out_totals])
+ 
+#     products_data = []
+#     find_all_prpducts = product.objects.all()
+#     for i in find_all_prpducts:
+#         product_id = i.id
+#         find_all_purchases_q = Parchase.objects.filter(product=product_id).aggregate(total_quantity_in_Purchase=Sum('quantity'),)
+#         purchase_qty = find_all_purchases_q['total_quantity_in_Purchase'] or 0
+#         purchase_products_in_item_delas = item_deals.objects.filter(item=product_id,status='رسید').aggregate(total_quantity_in_item_delas=Sum('number'),)
+#         item_deals_qty = purchase_products_in_item_delas['total_quantity_in_item_delas'] or 0
+
+#         find_all_purchases_weight = Parchase.objects.filter(product=product_id).aggregate(total_weight_in_Purchase=Sum('wegiht'),)
+#         purchase_wigh = find_all_purchases_weight['total_weight_in_Purchase'] or 0
+#         purchase_prduct_item_delas_wirght = item_deals.objects.filter(item=product_id,status='رسید').aggregate(total_weight_in_item_delas=Sum('weighht'),)
+#         total_wight_in_item_delas_purchase = purchase_prduct_item_delas_wirght['total_weight_in_item_delas'] or 0
+
+
+#         find_all_sale_q = sale_item_part.objects.filter(product=product_id).aggregate(total_quantity_in_sale=Sum('quantity'))
+#         sale_qty = find_all_sale_q['total_quantity_in_sale'] or 0
+#         sale_products_in_item_deal_quantity = item_deals.objects.filter(item=product_id,status='برداشت').aggregate(total_quantity_sold_in_item_deals=Sum('number'),)
+#         item_deals_qty_sold = sale_products_in_item_deal_quantity['total_quantity_sold_in_item_deals'] or 0
+
+#         find_all_sale_weight = sale_item_part.objects.filter(product=product_id).aggregate(total_wight_in_sale=Sum('weight'),)
+#         sold_wight = find_all_sale_weight['total_wight_in_sale'] or 0
+#         sold_products_in_item_delas_weight = item_deals.objects.filter(item=product_id,status='برداشت').aggregate(total_weight_sold_in_item_deals=Sum('weighht'))
+#         total_weight_in_item_deals_sold = sold_products_in_item_delas_weight['total_weight_sold_in_item_deals'] or 0
+                
+#         products_data.append({
+#             'product_id':product_id,
+#             'product_name':i.meat_name,
+#             'total_quantity_purchased': purchase_qty + item_deals_qty or 0,
+#             'total_weight_purchased': purchase_wigh + total_wight_in_item_delas_purchase or 0,
+#             'total_quantity_sold': sale_qty + item_deals_qty_sold or 0,
+#             'total_wegiht_sold': sold_wight + total_weight_in_item_deals_sold or 0
+#         }) 
+
+
+   
+#     context = {
+#         'results': results,
+#         'warejouse':warejouse,
+#         'all_date':all_date,
+#         'products_data':products_data,
+#     }
+#     return render(request,'product_and_catago/ware_ingo.html',context)
+
+
+
+
 def ware_data(request,id):
     all_date = inventrories.objects.filter(warehouse_foerignkey=id).order_by('id')
     warejouse = warehouse_info.objects.get(id=id)
-    find_Purchase_date = (
-        inventrories.objects.filter(warehouse_foerignkey=id, in_and_out='IN')
-        .values('product_foerignkey', 'product_foerignkey__meat_name')
-        .annotate(
-            total_weight_in_Purchase=Sum('weight_field'),
-            total_quantity_in_Purchase=Sum('Quantity')
-        )
-    )
-    find_sell_date = (
-        inventrories.objects.filter(warehouse_foerignkey=id, in_and_out='OUT')
-        .values('product_foerignkey', 'product_foerignkey__meat_name')
-        .annotate(
-            total_weight_in_sell=Sum('weight_field'),
-            total_quantity_in_sell=Sum('Quantity')
-        )
-    )
 
-    sell_dict = {item['product_foerignkey']: item for item in find_sell_date}
-
+    # updated only this section: results should calculate like direct sale / products_data
     results = []
-    for Purchase_item in find_Purchase_date:
-        product_id = Purchase_item['product_foerignkey']
-        meat_name = Purchase_item['product_foerignkey__meat_name']
-        
-        sell_item = sell_dict.get(product_id, {'total_weight_in_sell': 0, 'total_quantity_in_sell': 0})
+    find_all_prpducts_for_results = product.objects.all()
 
-        mines_from_Purchase_to_sell = sell_item['total_weight_in_sell'] - Purchase_item['total_weight_in_Purchase']
-        mines_quantity_to_sell = sell_item['total_quantity_in_sell'] - Purchase_item['total_quantity_in_Purchase']
+    for i in find_all_prpducts_for_results:
+        product_id = i.id
+
+        find_all_purchases_q = Parchase.objects.filter(product=product_id).aggregate(
+            total_quantity_in_Purchase=Sum('quantity'),
+        )
+        purchase_qty = find_all_purchases_q['total_quantity_in_Purchase'] or 0
+
+        purchase_products_in_item_delas = item_deals.objects.filter(
+            item=product_id,
+            status='رسید'
+        ).aggregate(
+            total_quantity_in_item_delas=Sum('number'),
+        )
+        item_deals_qty = purchase_products_in_item_delas['total_quantity_in_item_delas'] or 0
+
+        find_all_purchases_weight = Parchase.objects.filter(product=product_id).aggregate(
+            total_weight_in_Purchase=Sum('wegiht'),
+        )
+        purchase_wigh = find_all_purchases_weight['total_weight_in_Purchase'] or 0
+
+        purchase_prduct_item_delas_wirght = item_deals.objects.filter(
+            item=product_id,
+            status='رسید'
+        ).aggregate(
+            total_weight_in_item_delas=Sum('weighht'),
+        )
+        total_wight_in_item_delas_purchase = purchase_prduct_item_delas_wirght['total_weight_in_item_delas'] or 0
+
+        find_all_sale_q = sale_item_part.objects.filter(product=product_id).aggregate(
+            total_quantity_in_sale=Sum('quantity')
+        )
+        sale_qty = find_all_sale_q['total_quantity_in_sale'] or 0
+
+        sale_products_in_item_deal_quantity = item_deals.objects.filter(
+            item=product_id,
+            status='برداشت'
+        ).aggregate(
+            total_quantity_sold_in_item_deals=Sum('number'),
+        )
+        item_deals_qty_sold = sale_products_in_item_deal_quantity['total_quantity_sold_in_item_deals'] or 0
+
+        find_all_sale_weight = sale_item_part.objects.filter(product=product_id).aggregate(
+            total_wight_in_sale=Sum('weight'),
+        )
+        sold_wight = find_all_sale_weight['total_wight_in_sale'] or 0
+
+        sold_products_in_item_delas_weight = item_deals.objects.filter(
+            item=product_id,
+            status='برداشت'
+        ).aggregate(
+            total_weight_sold_in_item_deals=Sum('weighht')
+        )
+        total_weight_in_item_deals_sold = sold_products_in_item_delas_weight['total_weight_sold_in_item_deals'] or 0
+
+        available_quantity = (purchase_qty + item_deals_qty) - (sale_qty + item_deals_qty_sold)
+        available_weight = (purchase_wigh + total_wight_in_item_delas_purchase) - (sold_wight + total_weight_in_item_deals_sold)
 
         results.append({
-            'meat_name': meat_name,
-            'mines_from_Purchase_to_sell': mines_from_Purchase_to_sell,
-            'mines_quantity_to_sell': mines_quantity_to_sell,
+            'meat_name': i.meat_name,
+            'mines_from_Purchase_to_sell': available_weight,
+            'mines_quantity_to_sell': available_quantity,
         })
+
     in_totals = inventrories.objects.filter(in_and_out='IN',warehouse_foerignkey=id).values(
         'product_foerignkey__meat_name'
     ).annotate(
@@ -116,7 +250,6 @@ def ware_data(request,id):
         purchase_prduct_item_delas_wirght = item_deals.objects.filter(item=product_id,status='رسید').aggregate(total_weight_in_item_delas=Sum('weighht'),)
         total_wight_in_item_delas_purchase = purchase_prduct_item_delas_wirght['total_weight_in_item_delas'] or 0
 
-
         find_all_sale_q = sale_item_part.objects.filter(product=product_id).aggregate(total_quantity_in_sale=Sum('quantity'))
         sale_qty = find_all_sale_q['total_quantity_in_sale'] or 0
         sale_products_in_item_deal_quantity = item_deals.objects.filter(item=product_id,status='برداشت').aggregate(total_quantity_sold_in_item_deals=Sum('number'),)
@@ -136,8 +269,6 @@ def ware_data(request,id):
             'total_wegiht_sold': sold_wight + total_weight_in_item_deals_sold or 0
         }) 
 
-
-   
     context = {
         'results': results,
         'warejouse':warejouse,
@@ -145,10 +276,6 @@ def ware_data(request,id):
         'products_data':products_data,
     }
     return render(request,'product_and_catago/ware_ingo.html',context)
-
-
-
-
 
 
 def delete_warehouse(request, id):

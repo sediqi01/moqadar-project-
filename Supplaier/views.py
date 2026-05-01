@@ -13,7 +13,9 @@ from decimal import Decimal
 from django.db.models import OuterRef, Subquery
 
 from django.db import transaction, DatabaseError
-
+from decimal import Decimal
+from django.db.models import OuterRef, Subquery, F, Value, Case, When, DecimalField
+from django.db.models.functions import Coalesce
 
 
 def supplaier(request):
@@ -53,22 +55,69 @@ def supplaier(request):
 
         sum_of_all_sale = Parchase.objects.all()
         total_paid_amoun = sum_of_all_sale.aggregate(total=Sum('paid_amount'))['total']
-        collect_all = (total_paid_amoun or 0) + (total_paid_amount or 0)
-
-        latest_loans = SLoan.objects.filter(customer=OuterRef('customer')).order_by('-created').values('id')[:1]
-        loans_with_latest = SLoan.objects.filter(id__in=Subquery(latest_loans))
-        total_sum = loans_with_latest.aggregate(total_amount_sum=Sum('total_amount'))['total_amount_sum'] or 0 
-
-
-
-        latest_loans = SLoan.objects.filter(customer_id=OuterRef('id')).order_by('-id')
-        my_data = Customer.objects.filter(role__in=['تامین کننده', 'هردو']).annotate(
-            total_borrow=Subquery(latest_loans.values('total_amount')[:1])
-        )
+        find_all_paid_from_bothpartyledger = BothPartyLedger.objects.filter(entry_type='pay_to_partner').aggregate(total_paid=Sum('paid_amount'))
+        total_paid = find_all_paid_from_bothpartyledger['total_paid'] or 0
         
+        collect_all = (total_paid_amoun or 0) + (total_paid_amount or 0) + float(total_paid or 0)
 
+        # latest_loans = SLoan.objects.filter(customer_id=OuterRef('id')).order_by('-id')
 
-        # my_data = Customer.objects.filter(role__in=['تامین کننده', 'هردو'])
+        # my_data = Customer.objects.filter(role__in=['تامین کننده', 'هردو']).annotate(
+        #     total_borrow=Subquery(latest_loans.values('total_amount')[:1])
+        # )
+
+        # latest_loans = SLoan.objects.filter(customer=OuterRef('customer')).order_by('-created').values('id')[:1]
+        # loans_with_latest = SLoan.objects.filter(id__in=Subquery(latest_loans))
+        # total_sum = loans_with_latest.aggregate(total_amount_sum=Sum('total_amount'))['total_amount_sum'] or 0 
+                
+        
+        latest_loans = SLoan.objects.filter(
+            customer=OuterRef('id')
+        ).order_by('-id')
+
+        latest_ledger = BothPartyLedger.objects.filter(
+            customer_id=OuterRef('id')
+        ).order_by('-id')
+
+        my_data = Customer.objects.filter(
+            role__in=['تامین کننده', 'هردو']
+        ).annotate(
+            total_borrow=Coalesce(
+                Subquery(latest_loans.values('total_amount')[:1]),
+                Value(Decimal('0.00')),
+                output_field=DecimalField(max_digits=14, decimal_places=2)
+            ),
+
+            supplier_balance=Coalesce(
+                Subquery(latest_ledger.values('current_supplier_balance')[:1]),
+                Value(Decimal('0.00')),
+                output_field=DecimalField(max_digits=14, decimal_places=2)
+            ),
+            customer_balance=Coalesce(
+                Subquery(latest_ledger.values('current_customer_balance')[:1]),
+                Value(Decimal('0.00')),
+                output_field=DecimalField(max_digits=14, decimal_places=2)
+            ),
+        ).annotate(
+            ledger_due=Case(
+                When(
+                    supplier_balance__gt=F('customer_balance'),
+                    then=F('supplier_balance') - F('customer_balance')
+                ),
+                default=Value(Decimal('0.00')),
+                output_field=DecimalField(max_digits=14, decimal_places=2)
+            )
+        ).annotate(
+            supplier_due=Case(
+                When(role='تامین کننده', then=F('total_borrow')),
+                When(role='هردو', then=F('ledger_due')),
+                default=Value(Decimal('0.00')),
+                output_field=DecimalField(max_digits=14, decimal_places=2)
+            )
+        )
+        total_sum = my_data.aggregate(
+            total=Sum('supplier_due')
+        )['total'] or 0
 
         my_form = SupplaierForm()
         context = {

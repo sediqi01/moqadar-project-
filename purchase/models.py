@@ -55,3 +55,57 @@ class Purchase_loan(models.Model):
     created_at = models.DateField(auto_now_add=True)
     def __str__ (self):
         return self.naem_of_giver
+
+
+
+class BothPartyLedger(models.Model):
+    ENTRY_TYPES = [
+        ('purchase', 'خرید'),
+        ('sale', 'فروش'),
+        ('pay_to_partner', 'پرداخت به شخص'),
+        ('receive_from_partner', 'دریافت از شخص'),
+    ]
+
+    BALANCE_SIDES = [
+        ('supplier', 'حساب تامین کننده'),
+        ('customer', 'حساب مشتری'),
+    ]
+
+    customer = models.ForeignKey(
+        Customer,
+        on_delete=models.CASCADE,
+        related_name='both_party_ledger'
+    )
+
+    entry_type = models.CharField(max_length=20, choices=ENTRY_TYPES)
+    balance_side = models.CharField(max_length=20, choices=BALANCE_SIDES)
+
+    date = models.CharField(max_length=20, blank=True, null=True)
+
+    purchase = models.ForeignKey(
+        'Parchase',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='both_party_ledgers'
+    )
+    sale = models.ForeignKey(
+        'Order.sale_item_part',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='both_party_ledgers'
+    )
+
+    total_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    paid_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    remain_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    previous_supplier_balance = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    previous_customer_balance = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    current_supplier_balance = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    current_customer_balance = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    note = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)

@@ -142,195 +142,227 @@ def edit_order(request, id):
 
 from django.forms import modelformset_factory
 from django.shortcuts import get_object_or_404
+def create_both_party_sale_ledger(customer, sale_instance, sale_item, total_amount, paid_amount, remain_amount):
+    last_row = BothPartyLedger.objects.filter(customer=customer).order_by('-id').first()
 
+    prev_supplier_balance = last_row.current_supplier_balance if last_row else Decimal('0')
+    prev_customer_balance = last_row.current_customer_balance if last_row else Decimal('0')
 
-def Direct_sale(request):
-    summary = (
-        sale_item_part.objects.values('product__id', 'product__meat_name').annotate(
-            total_quantity=Sum('quantity'),
-            total_weight=Sum('weight')
-        )
+    new_supplier_balance = prev_supplier_balance
+    new_customer_balance = prev_customer_balance + Decimal(remain_amount)
+
+    return BothPartyLedger.objects.create(
+        customer=customer,
+        entry_type='sale',
+        date=sale_instance.reg_date,
+        sale=sale_item,
+        total_amount=Decimal(total_amount),
+        paid_amount=Decimal(paid_amount),
+        remain_amount=Decimal(remain_amount),
+        previous_supplier_balance=prev_supplier_balance,
+        previous_customer_balance=prev_customer_balance,
+        current_supplier_balance=new_supplier_balance,
+        current_customer_balance=new_customer_balance,
+        note='ثبت فروش برای شخص هردو'
     )
-    SaleItemFormSet = modelformset_factory(sale_item_part, form=sale_itemForm, extra=0, can_delete=True)
-    sale_item_formset = SaleItemFormSet(request.POST or None, queryset=sale_item_part.objects.none())
-    find_all_sale_money = sale_item_part.objects.aggregate(total_should_paid=Sum('should_paid'))
-    total_should_paid = find_all_sale_money['total_should_paid'] or 0
-    customer_list =  Customer.objects.filter(role__in=['مشتری', 'هردو'])
+
+# def Direct_sale(request):
+#     summary = (
+#         sale_item_part.objects.values('product__id', 'product__meat_name').annotate(
+#             total_quantity=Sum('quantity'),
+#             total_weight=Sum('weight')
+#         )
+#     )
+#     SaleItemFormSet = modelformset_factory(sale_item_part, form=sale_itemForm, extra=0, can_delete=True)
+#     sale_item_formset = SaleItemFormSet(request.POST or None, queryset=sale_item_part.objects.none())
+#     find_all_sale_money = sale_item_part.objects.aggregate(total_should_paid=Sum('should_paid'))
+#     total_should_paid = find_all_sale_money['total_should_paid'] or 0
+#     customer_list =  Customer.objects.filter(role__in=['مشتری', 'هردو'])
     
-    my_form = SaleForm(request.POST or None)
-    products = product.objects.all()
-    warehouses = warehouse_info.objects.all()
-    my_date = sale_item_part.objects.all().order_by('id')
-    system_all_money = total_balance.objects.first()
-    try:
-        first_record = system_all_money.total_money_in_system
-    except:
-        return HttpResponse('پول در سیستم موجود نیست ..!')
+#     my_form = SaleForm(request.POST or None)
+#     products = product.objects.all()
+#     warehouses = warehouse_info.objects.all()
+#     my_date = sale_item_part.objects.all().order_by('id')
+#     system_all_money = total_balance.objects.first()
+#     try:
+#         first_record = system_all_money.total_money_in_system
+#     except:
+#         return HttpResponse('پول در سیستم موجود نیست ..!')
 
-    if request.method == 'POST':
-        if my_form.is_valid() and sale_item_formset.is_valid():
+#     if request.method == 'POST':
+#         if my_form.is_valid() and sale_item_formset.is_valid():
             
-            try:
-                with transaction.atomic():  
-                    customer = my_form.cleaned_data.get('customer')
-                    sale_ins = my_form.save(commit=False)
-                    sale_instance = my_form.save()
+#             try:
+#                 with transaction.atomic():  
+#                     customer = my_form.cleaned_data.get('customer')
+#                     sale_ins = my_form.save(commit=False)
+#                     sale_instance = my_form.save()
                     
-                    sale_items = sale_item_formset.save(commit=False)
+#                     sale_items = sale_item_formset.save(commit=False)
 
-                    for form, sale_item in zip(sale_item_formset.forms, sale_items):
-                        if form.cleaned_data:
-                            quantity = form.cleaned_data.get('quantity')
-                            weight = form.cleaned_data.get('weight')
-                            price_per_unit = form.cleaned_data.get('price_per_unit')
-                            paid_amount_for_every_record = form.cleaned_data.get('paid_amount_for_every_record')
-                            product_instance = form.cleaned_data.get('product')
-                            warehouse_instance = form.cleaned_data.get('warehouse')
-                            status = form.cleaned_data.get('status')
+#                     for form, sale_item in zip(sale_item_formset.forms, sale_items):
+#                         if form.cleaned_data:
+#                             quantity = form.cleaned_data.get('quantity')
+#                             weight = form.cleaned_data.get('weight')
+#                             price_per_unit = form.cleaned_data.get('price_per_unit')
+#                             paid_amount_for_every_record = form.cleaned_data.get('paid_amount_for_every_record')
+#                             product_instance = form.cleaned_data.get('product')
+#                             warehouse_instance = form.cleaned_data.get('warehouse')
+#                             status = form.cleaned_data.get('status')
                             
 
-                            # Lock relevant inventory rows
-                            all_data = inventrories.objects.select_for_update().filter(
-                                warehouse_foerignkey=warehouse_instance,
-                                product_foerignkey=product_instance
-                            )
+#                             # Lock relevant inventory rows
+#                             all_data = inventrories.objects.select_for_update().filter(
+#                                 warehouse_foerignkey=warehouse_instance,
+#                                 product_foerignkey=product_instance
+#                             )
 
-                            find_purchase_date = inventrories.objects.filter(
-                                warehouse_foerignkey=warehouse_instance,
-                                product_foerignkey=product_instance,
-                                in_and_out='IN'
-                            ).values(
-                                'product_foerignkey', 'product_foerignkey__meat_name'
-                            ).annotate(
-                                total_weight_in_purchase=Sum('weight_field'),
-                                total_quantity_in_purchase=Sum('Quantity')
-                            )
+#                             find_purchase_date = inventrories.objects.filter(
+#                                 warehouse_foerignkey=warehouse_instance,
+#                                 product_foerignkey=product_instance,
+#                                 in_and_out='IN'
+#                             ).values(
+#                                 'product_foerignkey', 'product_foerignkey__meat_name'
+#                             ).annotate(
+#                                 total_weight_in_purchase=Sum('weight_field'),
+#                                 total_quantity_in_purchase=Sum('Quantity')
+#                             )
 
-                            find_sell_date = inventrories.objects.filter(
-                                warehouse_foerignkey=warehouse_instance,
-                                product_foerignkey=product_instance,
-                                in_and_out='OUT'
-                            ).values(
-                                'product_foerignkey', 'product_foerignkey__meat_name'
-                            ).annotate(
-                                total_weight_in_sell=Sum('weight_field'),
-                                total_quantity_in_sell=Sum('Quantity')
-                            )
+#                             find_sell_date = inventrories.objects.filter(
+#                                 warehouse_foerignkey=warehouse_instance,
+#                                 product_foerignkey=product_instance,
+#                                 in_and_out='OUT'
+#                             ).values(
+#                                 'product_foerignkey', 'product_foerignkey__meat_name'
+#                             ).annotate(
+#                                 total_weight_in_sell=Sum('weight_field'),
+#                                 total_quantity_in_sell=Sum('Quantity')
+#                             )
 
-                            sell_data_dict = {item['product_foerignkey']: item for item in find_sell_date}
+#                             sell_data_dict = {item['product_foerignkey']: item for item in find_sell_date}
+#                             for purchase in find_purchase_date:
+#                                 product_id = purchase['product_foerignkey']
+#                                 product_name = purchase['product_foerignkey__meat_name']
+#                                 total_weight_in = purchase['total_weight_in_purchase'] or 0
+#                                 total_quantity_in = purchase['total_quantity_in_purchase'] or 0
 
-                            for purchase in find_purchase_date:
-                                product_id = purchase['product_foerignkey']
-                                product_name = purchase['product_foerignkey__meat_name']
-                                total_weight_in = purchase['total_weight_in_purchase'] or 0
-                                total_quantity_in = purchase['total_quantity_in_purchase'] or 0
+#                                 total_weight_out = sell_data_dict.get(product_id, {}).get('total_weight_in_sell', 0)
+#                                 total_quantity_out = sell_data_dict.get(product_id, {}).get('total_quantity_in_sell', 0)
 
-                                total_weight_out = sell_data_dict.get(product_id, {}).get('total_weight_in_sell', 0)
-                                total_quantity_out = sell_data_dict.get(product_id, {}).get('total_quantity_in_sell', 0)
+#                                 weight_difference = total_weight_in - total_weight_out
+#                                 quantity_difference = total_quantity_in - total_quantity_out
 
-                                weight_difference = total_weight_in - total_weight_out
-                                quantity_difference = total_quantity_in - total_quantity_out
+#                                 if weight <= weight_difference and quantity <= quantity_difference:
+#                                     if status == 'ضرب وزن':
+#                                         should_paid = round(weight * price_per_unit)
+#                                     else:
+#                                         should_paid = round(quantity * price_per_unit)
 
-                                if weight <= weight_difference and quantity <= quantity_difference:
-                                    if status == 'ضرب وزن':
-                                        should_paid = round(weight * price_per_unit)
-                                    else:
-                                        should_paid = round(quantity * price_per_unit)
+#                                     borrow_amount = should_paid - paid_amount_for_every_record
 
-                                    borrow_amount = should_paid - paid_amount_for_every_record
+#                                     sale_item.should_paid = should_paid
+#                                     sale_item.borrow_amount = borrow_amount
+#                                     sale_item.sell_forei = sale_instance
+#                                     sale_item.reamin_amount_according_to_sale_record = borrow_amount
 
-                                    sale_item.should_paid = should_paid
-                                    sale_item.borrow_amount = borrow_amount
-                                    sale_item.sell_forei = sale_instance
-                                    sale_item.reamin_amount_according_to_sale_record = borrow_amount
+#                                     if Decimal(should_paid) > 0:
+#                                         system_all_money = total_balance.objects.select_for_update().first()
+#                                         system_all_money.total_money_in_system += Decimal(paid_amount_for_every_record)
+#                                         system_all_money.save()
 
-                                    if Decimal(should_paid) > 0:
-                                        system_all_money = total_balance.objects.select_for_update().first()
-                                        system_all_money.total_money_in_system += Decimal(paid_amount_for_every_record)
-                                        system_all_money.save()
+#                                         messages.success(request, 'مقدار شما قابل فروش است تشکر ...!')
+#                                     else:
+#                                         raise ValueError('پول مجموعی جنس کم است')
 
-                                        messages.success(request, 'مقدار شما قابل فروش است تشکر ...!')
-                                    else:
-                                        raise ValueError('پول مجموعی جنس کم است')
+#                                     sale_item.save()
 
-                                    sale_item.save()
-
-                                    inventrories.objects.create(
-                                        product_foerignkey=product_instance,
-                                        warehouse_foerignkey=warehouse_instance,
-                                        sale_forignkey=sale_item,
-                                        Quantity=quantity,
-                                        weight_field=weight,
-                                        in_and_out='OUT'
-                                    )
-
-                                    if sale_item.borrow_amount != 0:
-                                        latest_unpaid_loan = Loan.objects.filter(customer_id=customer.id).order_by('-id').first()
-                                        find_total_amount = Decimal(latest_unpaid_loan.total_amount) if latest_unpaid_loan else 0
-                                        total_amount = float(find_total_amount) + sale_item.borrow_amount
-                                        Loan.objects.create(
-                                            customer=my_form.instance.customer,
-                                            sale_id=sale_item,
-                                            amount=sale_item.borrow_amount,
-                                            total_amount=total_amount,
-                                            date_issued=my_form.instance.reg_date,
-                                            due_date="",
-                                            status="پرداخت نه شده",
-                                            notes=""
-                                        ) 
-                                    elif sale_item.borrow_amount == 0:
-                                        latest_unpaid_loan = Loan.objects.filter(customer_id=customer.id).order_by('-id').first()
-                                        find_total_amount = Decimal(latest_unpaid_loan.total_amount) if latest_unpaid_loan else 0
-                                        total_amount = find_total_amount
-                                        find_the_new_Saved_erord = sale_item_part.objects.last()
-                                        find_the_new_Saved_erord.is_money_approved = True
-                                        find_the_new_Saved_erord.save()
+#                                     inventrories.objects.create(
+#                                         product_foerignkey=product_instance,
+#                                         warehouse_foerignkey=warehouse_instance,
+#                                         sale_forignkey=sale_item,
+#                                         Quantity=quantity,
+#                                         weight_field=weight,
+#                                         in_and_out='OUT'
+#                                     )
+#                                     if customer.role == 'مشتری':
+#                                         if sale_item.borrow_amount != 0:
+#                                             latest_unpaid_loan = Loan.objects.filter(customer_id=customer.id).order_by('-id').first()
+#                                             find_total_amount = Decimal(latest_unpaid_loan.total_amount) if latest_unpaid_loan else 0
+#                                             total_amount = float(find_total_amount) + sale_item.borrow_amount
+#                                             Loan.objects.create(
+#                                                 customer=my_form.instance.customer,
+#                                                 sale_id=sale_item,
+#                                                 amount=sale_item.borrow_amount,
+#                                                 total_amount=total_amount,
+#                                                 date_issued=my_form.instance.reg_date,
+#                                                 due_date="",
+#                                                 status="پرداخت نه شده",
+#                                                 notes=""
+#                                             ) 
+#                                         elif sale_item.borrow_amount == 0:
+#                                             latest_unpaid_loan = Loan.objects.filter(customer_id=customer.id).order_by('-id').first()
+#                                             find_total_amount = Decimal(latest_unpaid_loan.total_amount) if latest_unpaid_loan else 0
+#                                             total_amount = find_total_amount
+#                                             find_the_new_Saved_erord = sale_item_part.objects.last()
+#                                             find_the_new_Saved_erord.is_money_approved = True
+#                                             find_the_new_Saved_erord.save()
 
 
-                                        Loan.objects.create(
-                                            customer=my_form.instance.customer,
-                                            sale_id=sale_item,
-                                            amount=should_paid,
-                                            total_amount=total_amount,
-                                            date_issued=my_form.instance.reg_date,
-                                            due_date="",
-                                            status="پرداخت شده",
-                                            notes=""
-                                        )
-                                else:
-                                    raise ValueError('محصول در گدام موجود نیست')
+#                                             Loan.objects.create(
+#                                                 customer=my_form.instance.customer,
+#                                                 sale_id=sale_item,
+#                                                 amount=should_paid,
+#                                                 total_amount=total_amount,
+#                                                 date_issued=my_form.instance.reg_date,
+#                                                 due_date="",
+#                                                 status="پرداخت شده",
+#                                                 notes=""
+#                                             )
+#                                     elif customer.role == 'هردو':
+                                        
+#                                         create_both_party_sale_ledger(
+#                                             customer=customer,
+#                                             sale_instance=sale_instance,
+#                                             sale_item=sale_item,
+#                                             total_amount=should_paid,
+#                                             paid_amount=paid_amount_for_every_record,
+#                                             remain_amount=sale_item.borrow_amount
+#                                         )
 
-                    for obj in sale_item_formset.deleted_objects:
-                        obj.delete()
+#                                 else:
+#                                     raise ValueError('محصول در گدام موجود نیست')
 
-                    messages.success(request, 'فروش و آیتم‌ها موفقانه ثبت شدند')
-                    return redirect('Order:Direct_sale')
+#                     for obj in sale_item_formset.deleted_objects:
+#                         obj.delete()
+
+#                     messages.success(request, 'فروش و آیتم‌ها موفقانه ثبت شدند')
+#                     return redirect('Order:Direct_sale')
 
             
-            except Exception as e:
-                messages.error(request, f'خطا در هنگام ثبت فروش: {str(e)}')
-                return redirect('Order:Direct_sale')
-        else:
+#             except Exception as e:
+#                 messages.error(request, f'خطا در هنگام ثبت فروش: {str(e)}')
+#                 return redirect('Order:Direct_sale')
+#         else:
             
 
-            return HttpResponse(
-                f"مشکل ثبت فروش\n"
-                f"Form errors: {my_form.errors}\n"
-                f"Formset errors: {sale_item_formset.errors}\n"
+#             return HttpResponse(
+#                 f"مشکل ثبت فروش\n"
+#                 f"Form errors: {my_form.errors}\n"
+#                 f"Formset errors: {sale_item_formset.errors}\n"
                 
-            )
+#             )
 
-    context = {
-        'products': products,
-        'my_date': my_date,
-        'warehouses': warehouses,
-        'my_form': my_form,
-        'sale_item_formset': sale_item_formset,
-        'total_should_paid':total_should_paid,
-        'customer_list':customer_list,
-        'summary':summary,
-    }
-    return render(request, 'Order/Direct_sale.html', context)
+#     context = {
+#         'products': products,
+#         'my_date': my_date,
+#         'warehouses': warehouses,
+#         'my_form': my_form,
+#         'sale_item_formset': sale_item_formset,
+#         'total_should_paid':total_should_paid,
+#         'customer_list':customer_list,
+#         'summary':summary,
+#     }
+#     return render(request, 'Order/Direct_sale.html', context)
 
 import os
 from reportlab.lib.pagesizes import A4, landscape
@@ -446,14 +478,12 @@ def generate_sale_item_pdf(request):
 
 
 
-
-
 def delete_sale(request, sale_item_id):
     try:
-        with transaction.atomic():  # Start transaction block
+        with transaction.atomic():
             sale_item = get_object_or_404(sale_item_part, id=sale_item_id)
-            find_sale_id = sale_item.sell_forei.customer.id
-  
+            customer_obj = sale_item.sell_forei.customer
+
             system_all_money = total_balance.objects.first()
             inventory_record = inventrories.objects.filter(
                 sale_forignkey=sale_item,
@@ -465,27 +495,44 @@ def delete_sale(request, sale_item_id):
                 messages.error(request, 'سیستم بالانس موجود نیست.')
                 return redirect('Order:Direct_sale')
 
-            system_all_money.total_money_in_system -= Decimal(sale_item.paid_amount_for_every_record)
+            # reverse paid money from system
+            system_all_money.total_money_in_system -= Decimal(sale_item.paid_amount_for_every_record or 0)
             system_all_money.save()
 
-         
+            # =========================
+            # old customer logic kept
+            # new both-party logic added
+            # =========================
+            if customer_obj.role == 'مشتری':
+                related_loans = Loan.objects.filter(sale_id=sale_item).first()
 
-            related_loans = Loan.objects.get(sale_id=sale_item)
-            find_the_remain_amount = related_loans.sale_id.borrow_amount
-            find_the_paid_amoount_purchase = related_loans.sale_id.paid_amount_for_every_record
-            find_the_customer_id = related_loans.sale_id.sell_forei.customer_id
+                if related_loans:
+                    find_the_remain_amount = Decimal(related_loans.sale_id.borrow_amount or 0)
+                    find_the_customer_id = related_loans.sale_id.sell_forei.customer_id
 
-            find_the_sloan_for_supp = Loan.objects.filter(customer_id=find_the_customer_id).last()
-            mines_from_total_remian = find_the_sloan_for_supp.total_amount - find_the_remain_amount
-            delete_Record = related_loans.delete()
-            find_the_sloan_for_supp.total_amount = mines_from_total_remian
-            find_the_sloan_for_supp.save()
-          
+                    find_the_sloan_for_supp = Loan.objects.filter(customer_id=find_the_customer_id).last()
+                    if find_the_sloan_for_supp:
+                        mines_from_total_remian = Decimal(find_the_sloan_for_supp.total_amount or 0) - find_the_remain_amount
+                        find_the_sloan_for_supp.total_amount = mines_from_total_remian
+                        find_the_sloan_for_supp.save()
 
+                    related_loans.delete()
 
+            elif customer_obj.role == 'هردو':
+                BothPartyLedger.objects.filter(
+                    customer=customer_obj,
+                    sale=sale_item,
+                    entry_type='sale'
+                ).delete()
 
-            inventory_record.delete()
+            if inventory_record:
+                inventory_record.delete()
+
             sale_item.delete()
+
+            # recalculate ledger only for both-person
+            if customer_obj.role == 'هردو':
+                recalculate_both_party_ledger(customer_obj)
 
             messages.success(request, 'رکورد موفقانه حذف گردید و تغییرات اعمال شدند.')
             return redirect('Order:Direct_sale')
@@ -565,14 +612,51 @@ def return_order(request, sale_id):
         }
         return render(request, 'Order/return_sale.html', context)
 
+def recalculate_both_party_ledger(customer):
+    rows = BothPartyLedger.objects.filter(customer=customer).order_by('id')
+
+    supplier_balance = Decimal('0')
+    customer_balance = Decimal('0')
+
+    for row in rows:
+        row.previous_supplier_balance = supplier_balance
+        row.previous_customer_balance = customer_balance
+
+        if row.entry_type == 'purchase':
+            supplier_balance += Decimal(row.remain_amount or 0)
+
+        elif row.entry_type == 'sale':
+            customer_balance += Decimal(row.remain_amount or 0)
+
+        elif row.entry_type == 'pay_to_partner':
+            amount = Decimal(row.total_amount or 0)
+            supplier_balance -= amount
+
+        elif row.entry_type == 'receive_from_partner':
+            amount = Decimal(row.total_amount or 0)
+            customer_balance -= amount
+
+        row.current_supplier_balance = supplier_balance
+        row.current_customer_balance = customer_balance
+
+        row.save(update_fields=[
+            'previous_supplier_balance',
+            'previous_customer_balance',
+            'current_supplier_balance',
+            'current_customer_balance',
+        ])
+
+
+
 def edit_Direct_sale(request, id):
     sale_instance = get_object_or_404(Sale, id=id)
+    old_customer_obj = sale_instance.customer
     customer = sale_instance.customer.id
     system_all_money = total_balance.objects.first()
     
     SaleForm = modelform_factory(Sale, fields=('customer', 'reg_date'))
     SaleItemFormset = inlineformset_factory(Sale, sale_item_part, form=sale_itemForm, extra=0, can_delete=True)
-    
+    old_both_customer = None
     if request.method == 'POST':
         my_form = SaleForm(request.POST, instance=sale_instance)
         sale_item_formset = SaleItemFormset(request.POST, instance=sale_instance)
@@ -580,6 +664,7 @@ def edit_Direct_sale(request, id):
         if my_form.is_valid() and sale_item_formset.is_valid():
             try:
                 with transaction.atomic():
+                    old_both_customer = None
            
                     find_inventory = inventrories.objects.filter(sale_forignkey__sell_forei=sale_instance,in_and_out='OUT')
                     delte_obj = find_inventory.delete()
@@ -593,16 +678,24 @@ def edit_Direct_sale(request, id):
                 
                     
                     loan_amounts = []
-                    for item in sale_instance.sale_item_part_set.all():
-                        find_remain_Amount = item.borrow_amount
+                    if old_customer_obj.role == 'مشتری':
+                        for item in sale_instance.sale_item_part_set.all():
+                            find_remain_Amount = item.borrow_amount
 
-                        loan = Loan.objects.get(customer=customer,sale_id=item)
-                        find_last_user_loan = Loan.objects.filter(customer=customer).last()
-                        mines_from_toal_borrow = find_last_user_loan.total_amount - find_remain_Amount
-                        find_last_user_loan.total_amount = mines_from_toal_borrow
-                        find_last_user_loan.save()
-                        loan_amounts.append(loan.amount)
-                        loan.delete()
+                            loan = Loan.objects.get(customer=customer,sale_id=item)
+                            find_last_user_loan = Loan.objects.filter(customer=customer).last()
+                            mines_from_toal_borrow = find_last_user_loan.total_amount - find_remain_Amount
+                            find_last_user_loan.total_amount = mines_from_toal_borrow
+                            find_last_user_loan.save()
+                            loan_amounts.append(loan.amount)
+                            loan.delete()
+                    elif old_customer_obj.role == 'هردو':
+                        old_both_customer = old_customer_obj
+                        BothPartyLedger.objects.filter(
+                            customer=old_customer_obj,
+                            sale__sell_forei=sale_instance,
+                            entry_type='sale'
+                        ).delete()
                     
 
                  
@@ -697,35 +790,56 @@ def edit_Direct_sale(request, id):
                                     
 
                                 # Handle loans (same as your sale view)
-                                if borrow_amount != 0:
-                                    latest_loan = Loan.objects.filter(customer_id=customer.id).order_by('-id').first()
-                                    total_amount = Decimal(latest_loan.total_amount) if latest_loan else 0
-                                    total_amount += Decimal(borrow_amount)
-                                    
-                                    Loan.objects.create(
+                                if customer.role == 'مشتری':
+                                    if borrow_amount != 0:
+                                        latest_loan = Loan.objects.filter(customer_id=customer.id).order_by('-id').first()
+                                        total_amount = Decimal(latest_loan.total_amount) if latest_loan else 0
+                                        total_amount += Decimal(borrow_amount)
+                                        
+                                        Loan.objects.create(
+                                            customer=customer,
+                                            sale_id=sale_item,
+                                            amount=borrow_amount,
+                                            total_amount=total_amount,
+                                            date_issued=date,
+                                            due_date="",
+                                            status="پرداخت نه شده",
+                                            notes=""
+                                        ) 
+                                    else:
+                                        latest_loan = Loan.objects.filter(customer_id=customer.id).order_by('-id').first()
+                                        total_amount = Decimal(latest_loan.total_amount) if latest_loan else 0
+                                        
+                                        Loan.objects.create(
+                                            customer=customer,
+                                            sale_id=sale_item,
+                                            amount=should_paid,
+                                            total_amount=total_amount,
+                                            date_issued=date,
+                                            due_date="",
+                                            status="پرداخت شده",
+                                            notes=""
+                                        )
+                                elif customer.role == 'هردو':
+                                    BothPartyLedger.objects.create(
                                         customer=customer,
-                                        sale_id=sale_item,
-                                        amount=borrow_amount,
-                                        total_amount=total_amount,
-                                        date_issued=date,
-                                        due_date="",
-                                        status="پرداخت نه شده",
-                                        notes=""
-                                    ) 
-                                else:
-                                    latest_loan = Loan.objects.filter(customer_id=customer.id).order_by('-id').first()
-                                    total_amount = Decimal(latest_loan.total_amount) if latest_loan else 0
-                                    
-                                    Loan.objects.create(
-                                        customer=customer,
-                                        sale_id=sale_item,
-                                        amount=should_paid,
-                                        total_amount=total_amount,
-                                        date_issued=date,
-                                        due_date="",
-                                        status="پرداخت شده",
-                                        notes=""
+                                        entry_type='sale',
+                                        date=date,
+                                        sale=sale_item,
+                                        total_amount=Decimal(should_paid),
+                                        paid_amount=Decimal(paid_amount or 0),
+                                        remain_amount=Decimal(borrow_amount or 0),
+                                        previous_supplier_balance=Decimal('0'),
+                                        previous_customer_balance=Decimal('0'),
+                                        current_supplier_balance=Decimal('0'),
+                                        current_customer_balance=Decimal('0'),
+                                        note='ویرایش فروش برای شخص هردو'
                                     )
+                    if old_both_customer:
+                        recalculate_both_party_ledger(old_both_customer)
+
+                    if customer.role == 'هردو':
+                        recalculate_both_party_ledger(customer)
 
                     messages.success(request, 'فروش با موفقیت ویرایش شد')
                     return redirect('Order:Direct_sale')
@@ -909,3 +1023,237 @@ def order_loans(request):
     }
 
     return render(request, 'Order/loans.html', context)
+
+
+
+def get_product_available_stock(product_instance):
+    product_id = product_instance.id
+
+    # IN from purchases
+    purchase_data = Parchase.objects.filter(product=product_id).aggregate(
+        total_qty=Sum('quantity'),
+        total_weight=Sum('wegiht'),
+    )
+    purchase_qty = purchase_data['total_qty'] or 0
+    purchase_weight = purchase_data['total_weight'] or 0
+
+    # IN from item_deals  receipt
+    receipt_data = item_deals.objects.filter(
+        item=product_id,
+        status='رسید'
+    ).aggregate(
+        total_qty=Sum('number'),
+        total_weight=Sum('weighht'),
+    )
+    receipt_qty = receipt_data['total_qty'] or 0
+    receipt_weight = receipt_data['total_weight'] or 0
+
+    # OUT from direct sales
+    sale_data = sale_item_part.objects.filter(product=product_id).aggregate(
+        total_qty=Sum('quantity'),
+        total_weight=Sum('weight'),
+    )
+    sale_qty = sale_data['total_qty'] or 0
+    sale_weight = sale_data['total_weight'] or 0
+
+    # OUT from item_deals برداشت
+    withdraw_data = item_deals.objects.filter(
+        item=product_id,
+        status='برداشت'
+    ).aggregate(
+        total_qty=Sum('number'),
+        total_weight=Sum('weighht'),
+    )
+    withdraw_qty = withdraw_data['total_qty'] or 0
+    withdraw_weight = withdraw_data['total_weight'] or 0
+
+    available_quantity = (purchase_qty + receipt_qty) - (sale_qty + withdraw_qty)
+    available_weight = (purchase_weight + receipt_weight) - (sale_weight + withdraw_weight)
+
+    return {
+        'available_quantity': Decimal(str(available_quantity or 0)),
+        'available_weight': Decimal(str(available_weight or 0)),
+    }
+
+
+def Direct_sale(request):
+    summary = (
+        sale_item_part.objects.values('product__id', 'product__meat_name').annotate(
+            total_quantity=Sum('quantity'),
+            total_weight=Sum('weight')
+        )
+    )
+
+    SaleItemFormSet = modelformset_factory(
+        sale_item_part,
+        form=sale_itemForm,
+        extra=0,
+        can_delete=True
+    )
+    sale_item_formset = SaleItemFormSet(
+        request.POST or None,
+        queryset=sale_item_part.objects.none()
+    )
+
+    find_all_sale_money = sale_item_part.objects.aggregate(
+        total_should_paid=Sum('should_paid')
+    )
+    total_should_paid = find_all_sale_money['total_should_paid'] or 0
+
+    customer_list = Customer.objects.filter(role__in=['مشتری', 'هردو'])
+    my_form = SaleForm(request.POST or None)
+    products = product.objects.all()
+    warehouses = warehouse_info.objects.all()
+    my_date = sale_item_part.objects.all().order_by('id')
+
+    system_all_money = total_balance.objects.first()
+    if not system_all_money:
+        return HttpResponse('پول در سیستم موجود نیست ..!')
+
+    if request.method == 'POST':
+        if my_form.is_valid() and sale_item_formset.is_valid():
+            try:
+                with transaction.atomic():
+                    customer = my_form.cleaned_data.get('customer')
+                    sale_instance = my_form.save()
+
+                    sale_items = sale_item_formset.save(commit=False)
+
+                    for form, sale_item in zip(sale_item_formset.forms, sale_items):
+                        if not form.cleaned_data:
+                            continue
+
+                        quantity = form.cleaned_data.get('quantity') or 0
+                        weight = form.cleaned_data.get('weight') or 0
+                        price_per_unit = form.cleaned_data.get('price_per_unit') or 0
+                        paid_amount_for_every_record = form.cleaned_data.get('paid_amount_for_every_record') or 0
+                        product_instance = form.cleaned_data.get('product')
+                        warehouse_instance = form.cleaned_data.get('warehouse')
+                        status = form.cleaned_data.get('status')
+
+                        quantity = Decimal(str(quantity))
+                        weight = Decimal(str(weight))
+                        price_per_unit = Decimal(str(price_per_unit))
+                        paid_amount_for_every_record = Decimal(str(paid_amount_for_every_record))
+
+                        # Lock system balance row
+                        system_all_money = total_balance.objects.select_for_update().first()
+                        if not system_all_money:
+                            raise ValueError('پول در سیستم موجود نیست')
+
+                        # Calculate stock exactly like your existence page
+                        stock = get_product_available_stock(product_instance)
+                        available_quantity = stock['available_quantity']
+                        available_weight = stock['available_weight']
+
+                        # Validation based on sale type
+                        if status == 'ضرب وزن':
+                            if weight > available_weight:
+                                raise ValueError(
+                                    f'وزن کافی در گدام موجود نیست. موجودی فعلی {available_weight}'
+                                )
+                            should_paid = round(weight * price_per_unit)
+                        else:
+                            if quantity > available_quantity:
+                                raise ValueError(
+                                    f'تعداد کافی در گدام موجود نیست. موجودی فعلی {available_quantity}'
+                                )
+                            should_paid = round(quantity * price_per_unit)
+
+                        borrow_amount = Decimal(str(should_paid)) - paid_amount_for_every_record
+
+                        sale_item.should_paid = should_paid
+                        sale_item.borrow_amount = borrow_amount
+                        sale_item.sell_forei = sale_instance
+                        sale_item.reamin_amount_according_to_sale_record = borrow_amount
+                        sale_item.save()
+
+                        # keep inventory OUT record if you still want inventory history
+                        inventrories.objects.create(
+                            product_foerignkey=product_instance,
+                            warehouse_foerignkey=warehouse_instance,
+                            sale_forignkey=sale_item,
+                            Quantity=quantity,
+                            weight_field=weight,
+                            in_and_out='OUT'
+                        )
+
+                        # add paid money to system
+                        if paid_amount_for_every_record > 0:
+                            system_all_money.total_money_in_system += paid_amount_for_every_record
+                            system_all_money.save()
+
+                        # Customer loan logic
+                        if customer.role == 'مشتری':
+                            latest_unpaid_loan = Loan.objects.filter(
+                                customer_id=customer.id
+                            ).order_by('-id').first()
+
+                            previous_total = Decimal(
+                                str(latest_unpaid_loan.total_amount)
+                            ) if latest_unpaid_loan else Decimal('0')
+
+                            if borrow_amount != 0:
+                                total_amount = previous_total + borrow_amount
+                                Loan.objects.create(
+                                    customer=my_form.instance.customer,
+                                    sale_id=sale_item,
+                                    amount=borrow_amount,
+                                    total_amount=total_amount,
+                                    date_issued=my_form.instance.reg_date,
+                                    due_date="",
+                                    status="پرداخت نه شده",
+                                    notes=""
+                                )
+                            else:
+                                sale_item.is_money_approved = True
+                                sale_item.save(update_fields=['is_money_approved'])
+
+                                Loan.objects.create(
+                                    customer=my_form.instance.customer,
+                                    sale_id=sale_item,
+                                    amount=should_paid,
+                                    total_amount=previous_total,
+                                    date_issued=my_form.instance.reg_date,
+                                    due_date="",
+                                    status="پرداخت شده",
+                                    notes=""
+                                )
+
+                        elif customer.role == 'هردو':
+                            create_both_party_sale_ledger(
+                                customer=customer,
+                                sale_instance=sale_instance,
+                                sale_item=sale_item,
+                                total_amount=should_paid,
+                                paid_amount=paid_amount_for_every_record,
+                                remain_amount=borrow_amount
+                            )
+
+                    for obj in sale_item_formset.deleted_objects:
+                        obj.delete()
+
+                    messages.success(request, 'فروش و آیتم‌ها موفقانه ثبت شدند')
+                    return redirect('Order:Direct_sale')
+
+            except Exception as e:
+                messages.error(request, f'خطا در هنگام ثبت فروش: {str(e)}')
+                return redirect('Order:Direct_sale')
+
+        return HttpResponse(
+            f"مشکل ثبت فروش\n"
+            f"Form errors: {my_form.errors}\n"
+            f"Formset errors: {sale_item_formset.errors}\n"
+        )
+
+    context = {
+        'products': products,
+        'my_date': my_date,
+        'warehouses': warehouses,
+        'my_form': my_form,
+        'sale_item_formset': sale_item_formset,
+        'total_should_paid': total_should_paid,
+        'customer_list': customer_list,
+        'summary': summary,
+    }
+    return render(request, 'Order/Direct_sale.html', context)

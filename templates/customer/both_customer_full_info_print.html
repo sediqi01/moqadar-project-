@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>چاپ دفتر حساب {{ customer.name }}</title>
+
+    <link href="{% static 'css/themes/lite-purple.css' %}" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #fff;
+            color: #000;
+            margin: 0;
+            padding: 20px;
+            direction: rtl;
+        }
+
+        .print-wrapper {
+            width: 100%;
+        }
+
+        .print-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .print-header h2 {
+            margin: 0 0 8px 0;
+            font-size: 24px;
+        }
+
+        .print-header h4 {
+            margin: 0 0 8px 0;
+            font-size: 18px;
+        }
+
+        .print-header p {
+            margin: 4px 0;
+            font-size: 14px;
+        }
+
+        .print-actions {
+            text-align: left;
+            margin-bottom: 15px;
+        }
+
+        .print-actions button {
+            border: none;
+            background: #000;
+            color: #fff;
+            padding: 10px 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .table-box {
+            width: 100%;
+            overflow: visible;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        th, td {
+            border: 1px solid #000;
+            padding: 8px 6px;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        th {
+            background: #f3f3f3;
+            font-weight: bold;
+        }
+
+        .row-purchase {
+            background: #fff8db;
+        }
+
+        .row-sale {
+            background: #ddeeff;
+        }
+
+        .row-pay {
+            background: #ffe1e1;
+        }
+
+        .row-receive {
+            background: #dff7df;
+        }
+
+        @media print {
+            .print-actions {
+                display: none;
+            }
+
+            body {
+                padding: 0;
+                margin: 0;
+            }
+
+            @page {
+                size: landscape;
+                margin: 10mm;
+            }
+
+            thead {
+                display: table-header-group;
+            }
+
+            tr {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body onload="window.print()">
+
+    <div class="print-wrapper">
+        <div class="print-actions">
+            <button onclick="window.print()">
+                <i class="fas fa-print"></i>
+                چاپ
+            </button>
+        </div>
+
+        <div class="print-header">
+            <h2>دفتر حساب</h2>
+            <h4>{{ customer.name }}</h4>
+            <p>وضعیت حساب: <strong>{{ net_status }}</strong></p>
+            <p>مقدار خالص: <strong>{{ net_amount|floatformat:2 }}</strong></p>
+        </div>
+
+        <div class="table-box">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>تاریخ</th>
+                        <th>نوع</th>
+                        <th>محصول</th>
+                        <th>تعداد</th>
+                        <th>وزن</th>
+                        <th>مجموعه</th>
+                        <th>پرداخت</th>
+                        <th>باقی</th>
+                        <th>بیلانس فعلی خرید</th>
+                        <th>بیلانس فعلی فروش</th>
+                        <th>شماره خرید</th>
+                        <th>شماره فروش</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in ledger_rows %}
+                    <tr
+                        class="
+                            {% if row.entry_type == 'purchase' %}row-purchase
+                            {% elif row.entry_type == 'sale' %}row-sale
+                            {% elif row.entry_type == 'pay_to_partner' %}row-pay
+                            {% elif row.entry_type == 'receive_from_partner' %}row-receive
+                            {% endif %}
+                        "
+                    >
+                        <td>{{ row.id }}</td>
+                        <td>{{ row.date|default:"-" }}</td>
+                        <td>
+                            {% if row.entry_type == 'purchase' %}
+                                خرید
+                            {% elif row.entry_type == 'sale' %}
+                                فروش
+                            {% elif row.entry_type == 'pay_to_partner' %}
+                                پرداخت به او
+                            {% elif row.entry_type == 'receive_from_partner' %}
+                                دریافت از او
+                            {% else %}
+                                {{ row.entry_type }}
+                            {% endif %}
+                        </td>
+
+                        {% if row.entry_type == 'purchase' %}
+                            <td>{{ row.purchase.product.meat_name }}</td>
+                        {% elif row.entry_type == 'sale' %}
+                            <td>{{ row.sale.product.meat_name }}</td>
+                        {% else %}
+                            <td>-</td>
+                        {% endif %}
+
+                        {% if row.entry_type == 'purchase' %}
+                            <td>{{ row.purchase.quantity }}</td>
+                        {% elif row.entry_type == 'sale' %}
+                            <td>{{ row.sale.quantity }}</td>
+                        {% else %}
+                            <td>-</td>
+                        {% endif %}
+
+                        {% if row.entry_type == 'purchase' %}
+                            <td>{{ row.purchase.wegiht }}</td>
+                        {% elif row.entry_type == 'sale' %}
+                            <td>{{ row.sale.weight }}</td>
+                        {% else %}
+                            <td>-</td>
+                        {% endif %}
+
+                        <td>{{ row.total_amount|floatformat:2 }}</td>
+                        <td>{{ row.paid_amount|floatformat:2 }}</td>
+                        <td>{{ row.remain_amount|floatformat:2 }}</td>
+                        <td>{{ row.current_supplier_balance|floatformat:2 }}</td>
+                        <td>{{ row.current_customer_balance|floatformat:2 }}</td>
+
+                        <td>
+                            {% if row.purchase %}
+                                {{ row.purchase.id }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.sale %}
+                                {{ row.sale.id }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="13">هیچ ریکاردی موجود نیست</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</body>
+</html>

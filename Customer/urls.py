@@ -19,7 +19,18 @@ urlpatterns = [
     path('paid_with_sale/<int:id>/', views.paid_with_sale, name='paid_with_sale'),
     path('delete_paid_record_od_cudtomer/<int:id>/', views.delete_paid_record_od_cudtomer, name='delete_paid_record_od_cudtomer'),
     path('loan_people/', views.loan_people, name='loan_people'),
+    path('both_partner_calculation/<int:id>/', views.both_partner_calculation, name='both_partner_calculation'),
     path('loan-people/print/',  views.loan_people_print, name='loan_people_print'),
+    path('delete_both_party_operation/<int:id>/',views.delete_both_party_operation,name='delete_both_party_operation'),
+    path(
+        'both_partner_calculation/print/<int:id>/',
+        views.both_partner_calculation_print,
+        name='both_partner_calculation_print'
+    ),
+    
+    
+    
+
 
 
 

@@ -40,6 +40,7 @@ import arabic_reshaper
 import os
 from Customer.models import Loan,SLoan
 from django.db import transaction
+from purchase.models import BothPartyLedger
 
 
 
@@ -49,6 +50,10 @@ def malle_wa_mahaseba(request):
    
     collaborators  = coolaborators.objects.all()
     loans = Loan.objects.all().order_by('id')
+    bot_ledger_entry = BothPartyLedger.objects.filter(entry_type__in=['sale', 'receive_from_partner'])
+    purchase_both_ledger_entry = BothPartyLedger.objects.filter(entry_type__in=['purchase', 'pay_to_partner'])
+    
+
     customer_ids = loans.values_list('customer_id', flat=True).distinct()
     
     customer_totals = {}
@@ -160,6 +165,7 @@ def malle_wa_mahaseba(request):
                                 fidn_the_balance = find_the_other_cuur_balance.balance
                                 sum_the_balance = fidn_the_balance + money
                                 find_the_other_cuur_balance.balance = sum_the_balance
+                                find_the_other_cuur_balance.save() 
                                 instance.exchagne_rate = exchange_rate 
                                 instance.exchanged_moneey = money * (exchange_rate if exchange_rate else 0)
                                 
@@ -188,7 +194,7 @@ def malle_wa_mahaseba(request):
                                         instance.total_incme_with_last_record = sum_with_the_last_record
                                         instance.blooelean_field = False
                                 
-                                find_the_other_cuur_balance.save()
+                                
                         else:
                             if find_the_name == 'افغانی':
                                 instance.is_income_or_outcome = 'دریافت'
@@ -204,7 +210,9 @@ def malle_wa_mahaseba(request):
                             else:
                                 instance.is_income_or_outcome = 'دریافت'
                                 find_the_other_cuur_balance = cuurency.objects.select_for_update().get(curr_name=currency_type)
-                                find_the_other_cuur_balance.balance = money
+                                fidn_the_balance = find_the_other_cuur_balance.balance
+                                sum_the_balance = fidn_the_balance + money
+                                find_the_other_cuur_balance.balance = sum_the_balance
                                 instance.exchagne_rate = exchange_rate 
                                 instance.exchanged_moneey = money * (exchange_rate if exchange_rate else 0)
                                 instance.total_incme_with_last_record = money
@@ -422,7 +430,8 @@ def malle_wa_mahaseba(request):
             'sloans':sloans,
             'supp_totals':supp_totals,
             'collaborators':collaborators,
-            
+            'bot_ledger_entry':bot_ledger_entry,
+            'purchase_both_ledger_entry':purchase_both_ledger_entry,
 
         }
     return render(request, 'finanace/public_page.html',context)
@@ -502,46 +511,70 @@ def collaborates(request):
             'last_boolean_values':last_boolean_values,
         }
     return render(request, 'finanace/coola.html',context)
-
+from django.db.models import Max
 def partners_loan_amount(request):
-    all_collaborators = coolaborators.objects.all()
     loan_data = []
-    for i in all_collaborators:
-        find_loans_Amount = income.objects.filter(olabrate=i,curr_id__curr_name='افغانی').last()
-        if find_loans_Amount:
-            if find_loans_Amount.blooelean_field == False:
-                loan_data.append({
-                    'name':i.name_opf,
-                    'loan_amount':find_loans_Amount.total_incme_with_last_record
-                })
-            else:
-                pass
-        else:
-            pass
+
+    all_collaborators = coolaborators.objects.all()
+
+    for partner in all_collaborators:
+        latest_currency_records = income.objects.filter(
+            olabrate=partner
+        ).values(
+            'curr'
+        ).annotate(
+            last_id=Max('id')
+        )
+
+        latest_ids = [item['last_id'] for item in latest_currency_records]
+
+        latest_records = income.objects.filter(
+            id__in=latest_ids,
+            blooelean_field=False
+        ).select_related('curr')
+
+        if latest_records.exists():
+            loan_data.append({
+                'partner': partner,
+                'records': latest_records,
+            })
+
     context = {
-        'loan_data':loan_data,
+        'loan_data': loan_data,
     }
-    return render(request, 'finanace/partner_loan_records.html',context)
+    return render(request, 'finanace/partner_loan_records.html', context)
 
 def loan_collaborate_partners(request):
-    all_collaborators = coolaborators.objects.all()
     loan_data = []
-    for i in all_collaborators:
-        find_loans_Amount = income.objects.filter(olabrate=i,curr_id__curr_name='افغانی').last()
-        if find_loans_Amount:
-            if find_loans_Amount.blooelean_field == False:
-                loan_data.append({
-                    'name':i.name_opf,
-                    'loan_amount':find_loans_Amount.total_incme_with_last_record
-                })
-            else:
-                pass
-        else:
-            pass
+
+    all_collaborators = coolaborators.objects.all()
+
+    for partner in all_collaborators:
+        latest_currency_records = income.objects.filter(
+            olabrate=partner
+        ).values(
+            'curr'
+        ).annotate(
+            last_id=Max('id')
+        )
+
+        latest_ids = [item['last_id'] for item in latest_currency_records]
+
+        latest_records = income.objects.filter(
+            id__in=latest_ids,
+            blooelean_field=False
+        ).select_related('curr')
+
+        if latest_records.exists():
+            loan_data.append({
+                'partner': partner,
+                'records': latest_records,
+            })
+
     context = {
-        'loan_data':loan_data,
+        'loan_data': loan_data,
     }
-    return render(request, 'finanace/partner_print_col.html',context)
+    return render(request, 'finanace/partner_print_col.html', context)
 
 
 
